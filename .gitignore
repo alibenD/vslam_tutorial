@@ -1,0 +1,25 @@
+#!/bin/bash
+
+#---Automatically Generated from template 'bash' wrote by @aliben---
+# @Copyright (C) 2018 All rights reserved.
+# @name: 
+# @author: aliben.develop@gmail.com
+# @created_date: 2018-11-20 10:31:08
+# @last_modified_date: NO_LAST_MODIFIED_DATE
+# @description: TODO
+#---***********************************************---
+
+#IGNORE LIST
+build
+bin
+lib
+doc
+*.swo
+*.swp
+*.o
+*.a
+.idea
+
+
+#DON NOT IGNORE LIST
+
