@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2018-11-27 15:35:27
-  * @last_modified_date: 2018-11-29 14:26:27
+  * @last_modified_date: 2018-11-29 16:46:52
   * @brief: TODO
   * @details: TODO
   */
@@ -30,6 +30,9 @@ int main(int argc, char** argv)
   // q,t is Tcw, which is different from Twc.
   Eigen::Vector3d pw;
   pw = q1.normalized().inverse() * (p1 - t1);
+  std::cout << "Quat_Matrix:\n"
+            << q1.normalized().toRotationMatrix()
+            << std::endl;
   std::cout << "pw:\n"
             << pw
             << std::endl;
@@ -40,19 +43,24 @@ int main(int argc, char** argv)
             << std::endl;
 
   // Matrix method
-  //Eigen::Isometry3d r1 = Eigen::Isometry3d::Identity();
-  //Eigen::Isometry3d r2 = Eigen::Isometry3d::Identity();
-  //r1.rotate(q1);
-  //r1.pretranslate(t1);
-  //r2.rotate(q2);
-  //r2.pretranslate(t2);
-  //std::cout << "Transform matrix1 = \n"
-  //          << r1.matrix()
-  //          << std::endl;
-  //pw = r1.inverse() * p1;
-  //p2 = r2 * pw;
-  //std::cout << "p2_:\n"
-  //          << p2
-  //          << std::endl;
+  Eigen::Isometry3d r1 = Eigen::Isometry3d::Identity();
+  Eigen::Isometry3d r2 = Eigen::Isometry3d::Identity();
+  r1.rotate(q1.normalized());
+  r1.pretranslate(t1);
+  r2.rotate(q2.normalized());
+  r2.pretranslate(t2);
+  std::cout << "Transform matrix1 = \n"
+            << r1.matrix()
+            << "\nInverse:\n"
+            << r1.matrix().inverse()
+            << std::endl;
+  pw = r1.inverse() * p1;
+  std::cout << "pw:\n"
+            << pw
+            << std::endl;
+  p2 = r2 * pw;
+  std::cout << "p2_:\n"
+            << p2
+            << std::endl;
   return 0;
 }
