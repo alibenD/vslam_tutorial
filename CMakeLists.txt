@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: NO_LAST_MODIFIED_DATE
+# @last_modified_date: 2018-11-23 21:48:32
 # @description: TODO
 #---****************************************************************---
 
@@ -23,7 +23,7 @@ project(visual_slam_tutorial)
 
   SET(CMAKE_VERBOSE_MAKEFILE OFF)
   SET(CMAKE_CXX_STANDARD 11)
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -std=c++14 -Wextra -Wno-deprecated-register -Wno-deprecated-declarations -Wno-unused-private-field -Wno-unused-parameter -Qunused-arguments -fcolor-diagnostics -ftemplate-backtrace-limit=0")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -std=c++14 -Wextra -Wno-deprecated-register -Wno-deprecated-declarations -Wno-unused-private-field -Wno-unused-parameter -Wno-unused-variable -Qunused-arguments -fcolor-diagnostics -ftemplate-backtrace-limit=0")
   #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -std=c++14 -Wextra -Wno-deprecated-register -Wno-deprecated-declarations -Qunused-arguments -fcolor-diagnostics -ftemplate-backtrace-limit=0")
   # Cross-platform check
   IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -56,6 +56,7 @@ project(visual_slam_tutorial)
   LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 # Find *Config.cmake
   # Example: find_package(OpenCV REQUIRED)
+  find_package(Eigen3 REQUIRED)
 
 # Set&Add INCLUDE PATH
   # Example: SET ( VPATH_NAME PATH )
@@ -63,6 +64,7 @@ project(visual_slam_tutorial)
   INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/include)
   INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/build/include)
   INCLUDE_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/include)
+  INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
 
 # Set&Add LIB PATH/LINKING_DIRECTORIES
   # Example: LINK_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/lib)
