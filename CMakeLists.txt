@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2018-11-23 21:48:32
+# @last_modified_date: 2018-11-30 10:23:37
 # @description: TODO
 #---****************************************************************---
 
@@ -57,6 +57,9 @@ project(visual_slam_tutorial)
 # Find *Config.cmake
   # Example: find_package(OpenCV REQUIRED)
   find_package(Eigen3 REQUIRED)
+  find_package(Pangolin REQUIRED)
+  find_package(Sophus REQUIRED)
+  find_package(OpenCV REQUIRED)
 
 # Set&Add INCLUDE PATH
   # Example: SET ( VPATH_NAME PATH )
@@ -65,11 +68,24 @@ project(visual_slam_tutorial)
   INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/build/include)
   INCLUDE_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/include)
   INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
+  INCLUDE_DIRECTORIES(${Sophus_INCLUDE_DIRS})
+  INCLUDE_DIRECTORIES(${Pangolin_INCLUDE_DIRS})
+  INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
 
 # Set&Add LIB PATH/LINKING_DIRECTORIES
   # Example: LINK_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/lib)
   LINK_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/lib)
   LINK_DIRECTORIES(${PROJECT_SOURCE_DIR}/lib)
+
+
+  SET( THIRD_PARTY_LIBS
+    ${Eigen3_LIBS}
+    ${Pangolin_LIBRARIES}
+    ${Sophus_LIBRARIES}
+    ${OpenCV_LIBS}
+  )
+#MESSAGE("*****" ${Pangolin_LIBS})
+#MESSAGE("#####" ${Pangolin_LIBRARIES})
 
 # Set Subdir(src)
   ADD_SUBDIRECTORY(src)
