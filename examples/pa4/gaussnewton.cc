@@ -27,55 +27,50 @@ int main(int argc, char **argv) {
     int iterations = 100;    // 迭代次数
     double cost = 0, lastCost = 0;  // 本次迭代的cost和上一次迭代的cost
 
-    for (int iter = 0; iter < iterations; iter++) {
-
+    for (int iter = 0; iter < iterations; iter++)
+    {
         Matrix3d H = Matrix3d::Zero();             // Hessian = J^T J in Gauss-Newton
         Vector3d b = Vector3d::Zero();             // bias
         cost = 0;
-
-        for (int i = 0; i < N; i++) {
-            double xi = x_data[i], yi = y_data[i];  // 第i个数据点
-            // start your code here
-            double error = 0;   // 第i个数据点的计算误差
-            error = 0; // 填写计算error的表达式
-            Vector3d J; // 雅可比矩阵
-            J[0] = 0;  // de/da
-            J[1] = 0;  // de/db
-            J[2] = 0;  // de/dc
-
-            H += J * J.transpose(); // GN近似的H
-            b += -error * J;
-            // end your code here
-
-            cost += error * error;
+        for (int i = 0; i < N; i++)
+        {
+          double xi = x_data[i], yi = y_data[i];  // 第i个数据点
+          // start your code here
+          double y_cal = exp(ae * xi * xi + be * xi + ce);
+          double error = pow(yi - y_cal, 2) / 2.;   // 第i个数据点的计算误差
+          //std::cout << "error: " << error << std::endl;
+          Vector3d J; // 雅可比矩阵
+          J[0] = -yi * xi * xi * y_cal + xi * xi * y_cal * y_cal;  // de/da
+          J[1] = -yi * xi * y_cal + xi * y_cal * y_cal;  // de/db
+          J[2] = -yi * y_cal + y_cal * y_cal;  // de/dc
+          H += J * J.transpose(); // GN近似的H
+          b += -error * J;
+          // end your code here
+          cost += error * error;
         }
-
         // 求解线性方程 Hx=b，建议用ldlt
- 	// start your code here
+        // start your code here
         Vector3d dx;
-	// end your code here
-
-        if (isnan(dx[0])) {
-            cout << "result is nan!" << endl;
-            break;
+        dx = H.ldlt().solve(b);
+        // end your code here
+        if (isnan(dx[0]))
+        {
+          cout << "result is nan!" << endl;
+          break;
         }
-
-        if (iter > 0 && cost > lastCost) {
-            // 误差增长了，说明近似的不够好
-            cout << "cost: " << cost << ", last cost: " << lastCost << endl;
-            break;
+        if (iter > 0 && cost > lastCost)
+        {
+          // 误差增长了，说明近似的不够好
+          cout << "cost: " << cost << ", last cost: " << lastCost << endl;
+          break;
         }
-
         // 更新abc估计值
         ae += dx[0];
         be += dx[1];
         ce += dx[2];
-
         lastCost = cost;
-
         cout << "total cost: " << cost << endl;
     }
-
     cout << "estimated abc = " << ae << ", " << be << ", " << ce << endl;
     return 0;
 }
