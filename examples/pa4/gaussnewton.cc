@@ -37,12 +37,12 @@ int main(int argc, char **argv) {
           double xi = x_data[i], yi = y_data[i];  // 第i个数据点
           // start your code here
           double y_cal = exp(ae * xi * xi + be * xi + ce);
-          double error = pow(yi - y_cal, 2) / 2.;   // 第i个数据点的计算误差
+          double error = yi - y_cal;   // 第i个数据点的计算误差
           //std::cout << "error: " << error << std::endl;
           Vector3d J; // 雅可比矩阵
-          J[0] = -yi * xi * xi * y_cal + xi * xi * y_cal * y_cal;  // de/da
-          J[1] = -yi * xi * y_cal + xi * y_cal * y_cal;  // de/db
-          J[2] = -yi * y_cal + y_cal * y_cal;  // de/dc
+          J[0] = -xi * xi * y_cal;  // de/da
+          J[1] = -xi * y_cal;  // de/db
+          J[2] = -y_cal;  // de/dc
           H += J * J.transpose(); // GN近似的H
           b += -error * J;
           // end your code here

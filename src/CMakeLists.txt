@@ -4,15 +4,16 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2018-11-28 10:14:49
+# @last_modified_date: 2018-12-06 22:50:48
 # @description: TODO
 #---****************************************************************---
 
 FILE(GLOB_RECURSE TYPES_HEADERS
   ../include/visual_slam_tutorial/*/*.h*
   ../include/visual_slam_tutorial/*.h*
+  ../include/*.h
   )
-FILE(GLOB_RECURSE SOURCES *.cc)
+FILE(GLOB_RECURSE SOURCES *.cc *.cpp *.c *.cxx)
 
 ADD_LIBRARY(visual_slam_tutorial SHARED ${TYPES_HEADERS} ${SOURCES})
 TARGET_LINK_LIBRARIES(visual_slam_tutorial ${THIRD_PARTY_LIBS})
