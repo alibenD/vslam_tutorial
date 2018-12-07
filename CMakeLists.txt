@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2018-11-30 10:23:37
+# @last_modified_date: 2018-12-06 22:55:50
 # @description: TODO
 #---****************************************************************---
 
@@ -42,6 +42,7 @@ project(visual_slam_tutorial)
     ADD_DEFINITION("-D PROJECT_CORE_EXPORTS")
   ENDIF()
 
+  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
   SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
   SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
   SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
@@ -60,6 +61,12 @@ project(visual_slam_tutorial)
   find_package(Pangolin REQUIRED)
   find_package(Sophus REQUIRED)
   find_package(OpenCV REQUIRED)
+  find_package(GLM REQUIRED)
+  find_package(GLFW3 REQUIRED)
+  find_package(ASSIMP REQUIRED)
+  message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
+  message(STATUS "Found GLFW3 in ${GLFW3_INCLUDE_DIR}")
+  message(STATUS "Found ASSIMP in ${ASSIMP_INCLUDE_DIR}")
 
 # Set&Add INCLUDE PATH
   # Example: SET ( VPATH_NAME PATH )
@@ -71,18 +78,24 @@ project(visual_slam_tutorial)
   INCLUDE_DIRECTORIES(${Sophus_INCLUDE_DIRS})
   INCLUDE_DIRECTORIES(${Pangolin_INCLUDE_DIRS})
   INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
+  INCLUDE_DIRECTORIES(/System/Library/Frameworks)
 
 # Set&Add LIB PATH/LINKING_DIRECTORIES
   # Example: LINK_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/lib)
   LINK_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/lib)
   LINK_DIRECTORIES(${PROJECT_SOURCE_DIR}/lib)
+  LINK_DIRECTORIES(${CMAKE_SOURCE_DIR}/lib)
 
 
+  SET(APPLE_LIBS ${COCOA_LIBRARY} ${IOKit_LIBRARY} ${OpenGL_LIBRARY} ${CoreVideo_LIBRARY})
+  SET(APPLE_LIBS ${APPLE_LIBS} ${GLFW3_LIBRARY} ${ASSIMP_LIBRARY})
+  SET(LIBS ${LIBS} ${APPLE_LIBS})
   SET( THIRD_PARTY_LIBS
     ${Eigen3_LIBS}
     ${Pangolin_LIBRARIES}
     ${Sophus_LIBRARIES}
     ${OpenCV_LIBS}
+    ${LIBS}
   )
 #MESSAGE("*****" ${Pangolin_LIBS})
 #MESSAGE("#####" ${Pangolin_LIBRARIES})
