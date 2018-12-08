@@ -142,7 +142,7 @@ void DrawTrajectory(Poses poses1, Poses poses2)
         return;
     }
     // create pangolin window and plot the trajectory
-    //pangolin::CreateWindowAndBind("Trajectory Viewer", 1024, 768);
+    pangolin::CreateWindowAndBind("Trajectory Viewer", 1024, 768);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
