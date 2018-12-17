@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2018-12-06 22:55:50
+# @last_modified_date: 2018-12-17 15:06:48
 # @description: TODO
 #---****************************************************************---
 
@@ -42,7 +42,7 @@ project(visual_slam_tutorial)
     ADD_DEFINITION("-D PROJECT_CORE_EXPORTS")
   ENDIF()
 
-  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake/modules/")
+  set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${CMAKE_SOURCE_DIR}/cmake_modules/")
   SET(CMAKE_INSTALL_RPATH "${CMAKE_INSTALL_PREFIX}/lib")
   SET(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
   SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
@@ -64,6 +64,7 @@ project(visual_slam_tutorial)
   find_package(GLM REQUIRED)
   find_package(GLFW3 REQUIRED)
   find_package(ASSIMP REQUIRED)
+  find_package(QT5 REQUIRED)
   message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
   message(STATUS "Found GLFW3 in ${GLFW3_INCLUDE_DIR}")
   message(STATUS "Found ASSIMP in ${ASSIMP_INCLUDE_DIR}")
