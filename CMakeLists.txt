@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2018-12-17 15:06:48
+# @last_modified_date: 2018-12-19 18:51:42
 # @description: TODO
 #---****************************************************************---
 
@@ -65,6 +65,7 @@ project(visual_slam_tutorial)
   find_package(GLFW3 REQUIRED)
   find_package(ASSIMP REQUIRED)
   find_package(QT5 REQUIRED)
+  find_package(G2O REQUIRED)
   message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
   message(STATUS "Found GLFW3 in ${GLFW3_INCLUDE_DIR}")
   message(STATUS "Found ASSIMP in ${ASSIMP_INCLUDE_DIR}")
@@ -97,7 +98,11 @@ project(visual_slam_tutorial)
     ${Sophus_LIBRARIES}
     ${OpenCV_LIBS}
     ${LIBS}
+    ${G2O_STUFF_LIBRARY}
+    ${G2O_CORE_LIBRARY}
+    ${G2O_CLI_LIBRARY}
   )
+MESSAGE("*****" ${G2O_LIBS})
 #MESSAGE("*****" ${Pangolin_LIBS})
 #MESSAGE("#####" ${Pangolin_LIBRARIES})
 
