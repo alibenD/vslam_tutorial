@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2018-12-19 18:51:42
+# @last_modified_date: 2018-12-21 14:18:23
 # @description: TODO
 #---****************************************************************---
 
@@ -102,7 +102,7 @@ project(visual_slam_tutorial)
     ${G2O_CORE_LIBRARY}
     ${G2O_CLI_LIBRARY}
   )
-MESSAGE("*****" ${G2O_LIBS})
+
 #MESSAGE("*****" ${Pangolin_LIBS})
 #MESSAGE("#####" ${Pangolin_LIBRARIES})
 
