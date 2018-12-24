@@ -172,6 +172,7 @@ void OpticalFlowSingleLevel(
           succ = false;
           break;
       }
+      std::cout << "****Small Patch:" << std::endl;
       // compute cost and jacobian
       for (int x = -half_patch_size; x < half_patch_size; x++)
       {
@@ -288,15 +289,15 @@ void OpticalFlowMultiLevel(
     auto img1_down = img1.clone();
     auto img2_down = img2.clone();
     vector<Mat> pyr1, pyr2; // image pyramids
+    pyr1.push_back(img1_down);
+    pyr2.push_back(img2_down);
     // TODO START YOUR CODE HERE (~8 lines)
     for (int i = 0; i < pyramids; i++)
     {
-      pyr1.push_back(img1_down);
-      pyr2.push_back(img2_down);
-      //cv::Mat img1_tmp;
-      //cv::Mat img2_tmp;
       cv::pyrDown(img1_down, img1_down, cv::Size(img1_down.cols/2, img1_down.rows/2));
       cv::pyrDown(img2_down, img2_down, cv::Size(img2_down.cols/2, img2_down.rows/2));
+      pyr1.push_back(img1_down);
+      pyr2.push_back(img2_down);
     }
     // TODO END YOUR CODE HERE
 
@@ -316,6 +317,7 @@ void OpticalFlowMultiLevel(
       {
         for(size_t i=0; i<kp2.size(); ++i)
         {
+          // For adapting the next layer kps
           kp2[i].pt = kp2[i].pt*2;
         }
       }
