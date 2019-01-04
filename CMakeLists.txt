@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2018-12-21 14:18:23
+# @last_modified_date: 2019-01-04 18:13:07
 # @description: TODO
 #---****************************************************************---
 
@@ -12,7 +12,7 @@
 cmake_minimum_required(VERSION 3.10)
 
 #project name
-project(visual_slam_tutorial)
+project(visual_slam)
 
 # CMake Build System Default Setup
   MESSAGE( STATUS "Project:  visual_slam_tutorial" )
