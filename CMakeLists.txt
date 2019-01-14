@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-01-14 11:32:40
+# @last_modified_date: 2019-01-14 14:50:01
 # @description: TODO
 #---****************************************************************---
 
@@ -71,7 +71,6 @@ project(visual_slam)
     SET( TEST_LIBS
     ${GTEST_BOTH_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT})
-    ADD_SUBDIRECTORY(test)
   ENDIF()
   IF(WITH_GLOG)
     ADD_DEFINITIONS(-DENABLE_GLOG)
@@ -132,6 +131,9 @@ project(visual_slam)
 # Set Subdir(src)
   ADD_SUBDIRECTORY(src)
   ADD_SUBDIRECTORY(examples)
+  IF(BUILD_GTESTS)
+    ADD_SUBDIRECTORY(test)
+  ENDIF()
 
 # EXECUTABLE
   # Example: ADD_EXECUTABLE( EXEC_NAME SRC_FILE_NAME_LIST )
