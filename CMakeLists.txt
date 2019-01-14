@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-01-14 14:50:01
+# @last_modified_date: 2019-01-14 16:23:27
 # @description: TODO
 #---****************************************************************---
 
@@ -99,6 +99,7 @@ project(visual_slam)
   INCLUDE_DIRECTORIES(${Sophus_INCLUDE_DIRS})
   INCLUDE_DIRECTORIES(${Pangolin_INCLUDE_DIRS})
   INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
+  #INCLUDE_DIRECTORIES(${G2O_INCLUDE_DIR})
   INCLUDE_DIRECTORIES(${GLOG_INCLUDE_DIRS})
   INCLUDE_DIRECTORIES(/System/Library/Frameworks)
 
