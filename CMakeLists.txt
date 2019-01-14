@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-01-11 16:36:54
+# @last_modified_date: 2019-01-14 11:32:40
 # @description: TODO
 #---****************************************************************---
 
@@ -24,7 +24,8 @@ project(visual_slam)
     ADD_DEFINITIONS(-DNDEBUG)
   ENDIF()
   MESSAGE( STATUS "Build Type: " ${CMAKE_BUILD_TYPE})
-  OPTION(BUILD_GTESTS "Build google test cases" ON)
+  OPTION(BUILD_GTESTS "Build test example cases with google test" ON)
+  OPTION(WITH_GLOG "Enable google log in this case" ON)
 
   SET(CMAKE_VERBOSE_MAKEFILE OFF)
   SET(CMAKE_CXX_STANDARD 11)
@@ -71,6 +72,9 @@ project(visual_slam)
     ${GTEST_BOTH_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT})
     ADD_SUBDIRECTORY(test)
+  ENDIF()
+  IF(WITH_GLOG)
+    ADD_DEFINITIONS(-DENABLE_GLOG)
   ENDIF()
   find_package(Eigen3 REQUIRED)
   find_package(Pangolin REQUIRED)
