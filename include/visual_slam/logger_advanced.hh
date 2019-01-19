@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-01-08 14:16:14
-  * @last_modified_date: 2019-01-14 13:43:06
+  * @last_modified_date: 2019-01-19 12:31:16
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -17,14 +17,7 @@
 #include <fstream>
 
 // Declaration
-void SignalHandle(const char* data, int size)
-{
-    std::ofstream fs("glog_dump.log",std::ios::app);
-    std::string str = std::string(data,size);
-    fs<<str;
-    fs.close();
-    LOG(ERROR)<<str;
-}
+void SignalHandle(const char* data, int size);
 
 #ifdef ENABLE_GLOG
   #define LOG_COLOR_ON FLAGS_colorlogtostderr = true;
