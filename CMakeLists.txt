@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-01-14 16:23:27
+# @last_modified_date: 2019-02-03 13:02:58
 # @description: TODO
 #---****************************************************************---
 
@@ -17,6 +17,7 @@ project(visual_slam)
 # CMake Build System Default Setup
   MESSAGE( STATUS "Project:  visual_slam_tutorial" )
   # Build type default
+  SET(CMAKE_BUILD_TYPE DEBUG)
   IF(NOT CMAKE_BUILD_TYPE)
     SET(CMAKE_BUILD_TYPE RELEASE)
   ENDIF()
@@ -58,6 +59,7 @@ project(visual_slam)
   IF(BUILD_SHARED_LIBS)
     SET(BUILD_SHARED_LIBS SHARED)
   ENDIF()
+  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Add extra Find module
   LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
@@ -82,7 +84,7 @@ project(visual_slam)
   find_package(GLM REQUIRED)
   find_package(GLFW3 REQUIRED)
   find_package(ASSIMP REQUIRED)
-  find_package(QT5 REQUIRED)
+  #find_package(QT5 REQUIRED)
   find_package(G2O REQUIRED)
   find_package(Glog REQUIRED)
   message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
