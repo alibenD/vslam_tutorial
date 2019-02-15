@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-01-08 14:16:14
-  * @last_modified_date: 2019-01-19 12:31:16
+  * @last_modified_date: 2019-02-15 14:33:04
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -39,8 +39,17 @@ void SignalHandle(const char* data, int size);
     LOG_SET_FATAL_DESTINATION("./log/log_fatal_")\
     LOG_INIT(argv[0])
   #define LOG_SHUTDOWN google::ShutdownGoogleLogging();
+  #define AK_LOG_SHUTDOWN LOG_SHUTDOWN
   #define AK_DLOG(type) DLOG(type)
   #define AK_LOG(type) LOG(type)
+  #define AK_DLOG_INFO AK_DLOG(INFO)
+  #define AK_DLOG_WARNING AK_DLOG(WARNING)
+  #define AK_DLOG_ERROR AK_DLOG(ERROR)
+  #define AK_DLOG_FATAL AK_DLOG(FATAL)
+  #define AK_LOG_INFO AK_LOG(INFO)
+  #define AK_LOG_WARNING AK_LOG(WARNING)
+  #define AK_LOG_ERROR AK_LOG(ERROR)
+  #define AK_LOG_FATAL AK_LOG(FATAL)
 #else
   #define LOG_INIT_CONVENIENT(name)
   #define LOG_INIT_DEFAULT
