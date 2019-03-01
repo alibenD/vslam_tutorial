@@ -216,6 +216,8 @@ namespace ak
       Frame::Ptr ptr_reference_frame_;
       std::vector<size_t> keypoints_grid_[IMAGE_COLS][IMAGE_ROWS];
       GridProperty grid_property_;
+      // Pose opencv
+      cv::Mat transform_camera_at_world_;
       // Pose SE3
   };
 }

@@ -163,6 +163,13 @@ namespace ak
         if(isInit == true)
         {
           Frame::vo_state = INITIALIZED;
+          Frame::ptr_initialized_frame->transform_camera_at_world_ = cv::Mat::eye(4, 4, CV_32F);
+          cv::Mat transform_current_at_initialized = cv::Mat::eye(4, 4, CV_32F);
+          R21.copyTo(transform_current_at_initialized.rowRange(0, 3).colRange(0, 3));
+          t21.copyTo(transform_current_at_initialized.rowRange(0, 3).col(3));
+          // Set pose for current frame
+          Frame::ptr_current_frame->transform_camera_at_world_ = transform_current_at_initialized;
+          AK_DLOG_INFO << "Tcw:\n" << transform_current_at_initialized;
         }
         else
         {
@@ -896,7 +903,7 @@ namespace ak
       {
         //AK_DLOG_ERROR << "One inliers captured.";
         matched_inliers.push_back(Frame::ptr_initialized_frame->best_matches_[i]);
-        AK_DLOG_WARNING << matched_inliers.size();
+//        AK_DLOG_WARNING << matched_inliers.size();
       }
     }
     //AK_DLOG_ERROR << "F-inliers.size = " << matched_inliers.size();
