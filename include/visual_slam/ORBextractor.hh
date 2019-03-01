@@ -18,16 +18,16 @@
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
 
-#ifndef __ORBEXTRACTOR_HH__
-#define __ORBEXTRACTOR_HH__
+#ifndef ORBEXTRACTOR_H
+#define ORBEXTRACTOR_H
 
 #include <vector>
 #include <list>
-#include <opencv2/opencv.hpp>
 #include <memory>
+#include <opencv2/opencv.hpp>
 
 
-namespace ORB_SLAM2
+namespace ak
 {
 
 class ExtractorNode
@@ -46,10 +46,11 @@ public:
 class ORBextractor
 {
 public:
+    
     using Ptr = std::shared_ptr<ORBextractor>;
     enum {HARRIS_SCORE=0, FAST_SCORE=1 };
 
-    ORBextractor(int nfeatures, double scaleFactor, int nlevels,
+    ORBextractor(int nfeatures, float scaleFactor, int nlevels,
                  int iniThFAST, int minThFAST);
 
     ~ORBextractor(){}
@@ -64,22 +65,22 @@ public:
     int inline GetLevels(){
         return nlevels;}
 
-    double inline GetScaleFactor(){
+    float inline GetScaleFactor(){
         return scaleFactor;}
 
-    std::vector<double> inline GetScaleFactors(){
+    std::vector<float> inline GetScaleFactors(){
         return mvScaleFactor;
     }
 
-    std::vector<double> inline GetInverseScaleFactors(){
+    std::vector<float> inline GetInverseScaleFactors(){
         return mvInvScaleFactor;
     }
 
-    std::vector<double> inline GetScaleSigmaSquares(){
+    std::vector<float> inline GetScaleSigmaSquares(){
         return mvLevelSigma2;
     }
 
-    std::vector<double> inline GetInverseScaleSigmaSquares(){
+    std::vector<float> inline GetInverseScaleSigmaSquares(){
         return mvInvLevelSigma2;
     }
 
@@ -105,12 +106,13 @@ protected:
 
     std::vector<int> umax;
 
-    std::vector<double> mvScaleFactor;
-    std::vector<double> mvInvScaleFactor;    
-    std::vector<double> mvLevelSigma2;
-    std::vector<double> mvInvLevelSigma2;
+    std::vector<float> mvScaleFactor;
+    std::vector<float> mvInvScaleFactor;    
+    std::vector<float> mvLevelSigma2;
+    std::vector<float> mvInvLevelSigma2;
 };
 
 } //namespace ORB_SLAM
 
-#endif // __ORBEXTRACTOR_HH__
+#endif
+
