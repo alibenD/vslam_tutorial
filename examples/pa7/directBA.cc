@@ -27,8 +27,8 @@ typedef vector<Sophus::SE3, Eigen::aligned_allocator<Sophus::SE3>> VecSE3;
 typedef vector<Eigen::Vector3d, Eigen::aligned_allocator<Eigen::Vector3d>> VecVec3d;
 
 // global variables
-string pose_file = "./poses.txt";
-string points_file = "./points.txt";
+string pose_file = "../data/poses.txt";
+string points_file = "../data/points.txt";
 
 // intrinsics
 float fx = 277.34;
