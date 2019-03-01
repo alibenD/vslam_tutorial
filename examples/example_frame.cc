@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-01-29 13:33:28
-  * @last_modified_date: 2019-02-14 22:42:12
+  * @last_modified_date: 2019-02-26 16:53:17
   * @brief: TODO
   * @details: TODO
   */
@@ -30,9 +30,10 @@ int main(int argc, char** argv)
   cv::Mat img_last;
   cv::Mat key_img_previous;
   cv::Mat img_current;
-  ak::Frame::K = (cv::Mat_<double>(3,3) << 718.856, 0, 607.1928,
-                                           0, 718.856, 185.2157,
+  ak::Frame::K = (cv::Mat_<float>(3,3) << 718.85602, 0, 607.1928,
+                                           0, 718.85602, 185.2157,
                                            0,       0,        1);
+  ak::Frame::enable_show = true;
   //std::vector<cv::Mat> image_set;
   for(auto img_name : img_lists)
   {
@@ -40,7 +41,7 @@ int main(int argc, char** argv)
     //AK_LOG(WARNING) << "img_path: " << img_path;
     //auto img = cv::imread(img_path);
     img_last = img_current;
-    img_current = cv::imread(img_path);
+    img_current = cv::imread(img_path, cv::IMREAD_GRAYSCALE);
     //img_lists.push_back(img_current);
     cv::Mat img_with_keypoints;
     auto pFrame = Frame::CreateFrame(img_current, img_with_keypoints);
