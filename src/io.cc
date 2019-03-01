@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-01-18 14:53:56
-  * @last_modified_date: 2019-01-29 14:00:20
+  * @last_modified_date: 2019-02-27 10:03:54
   * @brief: TODO
   * @details: TODO
   */
@@ -14,6 +14,9 @@
 #include <visual_slam/utils/io.hh>
 
 //CODE
+namespace ak
+{
+
 int ReadFileList(const std::string& path, std::vector<std::string>& item_list)
 {
   std::ifstream file_in(path);
@@ -33,4 +36,6 @@ int ReadFileList(const std::string& path, std::vector<std::string>& item_list)
     item_list.push_back(item);
   }
   return item_list.size();
+}
+
 }
