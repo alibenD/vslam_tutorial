@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-02-03 13:02:58
+# @last_modified_date: 2019-02-26 10:01:04
 # @description: TODO
 #---****************************************************************---
 
@@ -17,9 +17,8 @@ project(visual_slam)
 # CMake Build System Default Setup
   MESSAGE( STATUS "Project:  visual_slam_tutorial" )
   # Build type default
-  SET(CMAKE_BUILD_TYPE DEBUG)
   IF(NOT CMAKE_BUILD_TYPE)
-    SET(CMAKE_BUILD_TYPE RELEASE)
+    SET(CMAKE_BUILD_TYPE DEBUG)
   ENDIF()
   IF(CMAKE_BUILD_TYPE STREQUAL "RELEASE")
     ADD_DEFINITIONS(-DNDEBUG)
@@ -95,6 +94,7 @@ project(visual_slam)
   # Example: SET ( VPATH_NAME PATH )
   #          INCLUDE_DIRECTORIES(${VPATH_NAME})
   INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/include)
+  INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/ThirdParty/include)
   INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/build/include)
   INCLUDE_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/include)
   INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
@@ -132,6 +132,7 @@ project(visual_slam)
 #MESSAGE("#####" ${Pangolin_LIBRARIES})
 
 # Set Subdir(src)
+#ADD_SUBDIRECTORY(ThirdParty/src)
   ADD_SUBDIRECTORY(src)
   ADD_SUBDIRECTORY(examples)
   IF(BUILD_GTESTS)

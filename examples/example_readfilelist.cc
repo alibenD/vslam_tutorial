@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-01-20 21:42:28
-  * @last_modified_date: 2019-01-29 08:57:20
+  * @last_modified_date: 2019-02-27 10:05:28
   * @brief: TODO
   * @details: TODO
   */
@@ -14,6 +14,7 @@
 #include <visual_slam/utils/io.hh>
 
 //CODE
+using namespace ak;
 int main(int argc, char** argv)
 {
   LOG_INIT_DEFAULT;

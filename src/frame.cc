@@ -5,20 +5,32 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-01-21 16:11:21
-  * @last_modified_date: 2019-02-15 16:34:11
+  * @last_modified_date: 2019-02-28 21:54:14
   * @brief: TODO
   * @details: TODO
   */
 
 //INCLUDE
 #include <visual_slam/frame.hh>
+#include <visual_slam/ORBmatcher.hh>
 #include <thread>
 #include <future>
+#include <visual_slam/utils/io.hh>
+#include <visual_slam/utils/time.hh>
 
 //CODE
 namespace ak
 {
-  cv::Ptr<cv::ORB> Frame::ptr_orb_ = cv::ORB::create(2000);
+  using namespace std::chrono;
+  /*const*/ int NUM_FEATURES = 2000;
+  /*const*/ float LEVEL_SCALE_FACTOR = 1.2;
+  /*const*/ int NUM_LEVELS = 8;
+  /*const*/ int INIT_FAST = 20;
+  /*const*/ int MIN_FAST = 7;
+  //cv::Ptr<cv::ORB> Frame::ptr_orb_ = cv::ORB::create(2000);
+  ORBextractor::Ptr Frame::ptr_orb_extractor_init_advanced = std::make_shared<ORBextractor>(2*NUM_FEATURES,LEVEL_SCALE_FACTOR,NUM_LEVELS,INIT_FAST,MIN_FAST);
+  ORBextractor::Ptr Frame::ptr_orb_extractor_advanced = std::make_shared<ORBextractor>(NUM_FEATURES,LEVEL_SCALE_FACTOR,NUM_LEVELS,INIT_FAST,MIN_FAST);
+  //ORBmatcher::Ptr Frame::ptr_orb_matcher_init_advanced = std::make_shared<ORBextractor>(0.9, true);
   cv::Ptr<cv::DescriptorMatcher> Frame::matcher  = cv::DescriptorMatcher::create("BruteForce-Hamming");
   int Frame::factory_id = 0;
   Frame::Ptr Frame::ptr_initialized_frame = nullptr;
@@ -32,28 +44,34 @@ namespace ak
   std::vector<std::vector<cv::DMatch>> Frame::MATCHED_POINTS_SET;
   std::vector<std::pair<size_t, cv::Point3f>> Frame::init_landmarks;
 
-  double Frame::match_ratio_ = 2.0;
-  double Frame::sigma = 1.0;
+  float Frame::match_ratio_ = 2.0;
+  float Frame::sigma = 1.0;
   VO_STATE Frame::vo_state = NO_IMAGE;
+  bool Frame::enable_show = false;
   const size_t MAX_ITERATION = 200;
   cv::Mat Frame::K;
 
   Frame::Frame(ID_t id)
     : id_(id)
   {
-    ;
+    this->ptr_orb_matcher_init_advanced = new ORBmatcher(0.9, true);
   }
 
   Frame::Ptr Frame::CreateFrame(const cv::Mat& image,
                                 cv::Mat& image_with_keypoints)
   {
+    // TODO: (aliben.develop@gmail.com)
+    // Fix return value;
     auto pFrame = std::make_shared<Frame>(Frame::factory_id);
+    ++Frame::factory_id;
+    pFrame->grid_property_.setup(image);
     auto num_keypoints = pFrame->extractKeyPoints(image, image_with_keypoints);
-    pFrame->computeDescriptors(image);
+    //pFrame->assignFeaturePointToGrid();
+    //pFrame->computeDescriptors(image);
     pFrame->image_ = image.clone();
 
     Frame::ptr_last_frame = Frame::ptr_current_frame;
-    Frame::ptr_current_frame = pFrame;
+    //Frame::ptr_current_frame = pFrame;
     //if(Frame::factory_id == 0)
     if(Frame::vo_state == NO_IMAGE)
     {
@@ -64,6 +82,7 @@ namespace ak
         Frame::ptr_last_frame = nullptr;
         Frame::ptr_current_frame = pFrame;
         Frame::vo_state = NO_INITIALIZATION;
+        return pFrame;
       }
       else
       {
@@ -90,17 +109,39 @@ namespace ak
         Frame::vo_state = NO_IMAGE;
         return nullptr;
       }
-      auto num_matches = MatchDescriptor(Frame::ptr_initialized_frame,
-                                         pFrame);
+      //auto num_matches = MatchDescriptor(Frame::ptr_initialized_frame,
+      //                                   pFrame);
+      auto num_matches = pFrame->ptr_orb_matcher_init_advanced->SearchForInitialization(ptr_initialized_frame, pFrame, 100);
+      auto all_matches = ptr_initialized_frame->best_matches_;
+//      ptr_initialized_frame->best_matches_.clear();
+//      for(auto& match: all_matches)
+//      {
+//        if(match.distance > 50)
+//        {
+//          AK_DLOG_ERROR << "*****************WOHOWHOWHO";
+//          continue;
+//        }
+//        else
+//        {
+//          ptr_initialized_frame->best_matches_.push_back(match);
+//        }
+//      }
       AK_DLOG_ERROR << "Matched: " << num_matches;
+//      AK_DLOG_ERROR << "Best Matched: " << ptr_initialized_frame->best_matches_.size();
+      if(Frame::enable_show == true)
+      {
+        Frame::ShowMatches(Frame::ptr_initialized_frame, pFrame);
+      }
       if(num_matches < 100)
       {
         AK_DLOG_ERROR << "Matches ≤ 100, Restarting Init.";
-        Frame::ptr_initialized_frame = pFrame;
-        Frame::ptr_last_frame = Frame::ptr_initialized_frame;
+        //Frame::ptr_initialized_frame = pFrame;
+        //Frame::ptr_last_frame = Frame::ptr_initialized_frame;
+        Frame::ptr_initialized_frame = nullptr;
+        Frame::ptr_last_frame = nullptr;
         Frame::ptr_current_frame = nullptr;
-        //Frame::vo_state = NO_IMAGE;
-        Frame::vo_state = NO_INITIALIZATION;
+        Frame::vo_state = NO_IMAGE;
+        //Frame::vo_state = NO_INITIALIZATION;
         return nullptr;
       }
       else
@@ -108,11 +149,11 @@ namespace ak
         Frame::ptr_last_frame = Frame::ptr_initialized_frame;
         Frame::ptr_current_frame = pFrame;
         cv::Mat R21, t21;
+
         auto isInit = InitializeVO(Frame::ptr_initialized_frame,
                                    Frame::ptr_current_frame,
                                    R21,
                                    t21);
-        Frame::ShowMatches(Frame::ptr_last_frame, Frame::ptr_current_frame);
         //static int i = 0;
         //++i;
         //if(i == 2)
@@ -122,6 +163,10 @@ namespace ak
         if(isInit == true)
         {
           Frame::vo_state = INITIALIZED;
+        }
+        else
+        {
+          Frame::vo_state = NO_IMAGE;
         }
       }
     }
@@ -139,23 +184,37 @@ namespace ak
     //AK_LOG_INFO << "Size of keyframes: " << Frame::keyframes_vector.size();
     //AK_LOG_INFO << "Size of hash_keyframes: " << Frame::hash_keyframes.size();
     AK_LOG_INFO << "FrameID: " << Frame::factory_id;
-    Frame::factory_id++;
     return pFrame;
   }
 
   size_t Frame::extractKeyPoints(const cv::Mat& image,
                                  cv::Mat& img_with_keypoints)
   {
-    this->ptr_orb_->detect(image, this->keypoints_);
-    this->drawKeyPoints(image, img_with_keypoints);
+    //this->ptr_orb_->detect(image, this->keypoints_);
+    if(Frame::vo_state == NO_IMAGE || Frame::vo_state == NO_INITIALIZATION)
+    {
+      (*Frame::ptr_orb_extractor_init_advanced)(image,
+                                                cv::Mat(),
+                                                this->keypoints_,
+                                                this->descriptors_);
+    }
+    else
+    {
+      (*Frame::ptr_orb_extractor_advanced)(image,
+                                           cv::Mat(),
+                                           this->keypoints_,
+                                           this->descriptors_);
+    }
+    //this->drawKeyPoints(image, img_with_keypoints);
+    this->assignFeaturePointToGrid();
     return this->keypoints_.size();
   }
 
   int Frame::computeDescriptors(const cv::Mat& image)
   {
-    this->ptr_orb_->compute(image,
-                            this->keypoints_,
-                            this->descriptors_);
+    //this->ptr_orb_->compute(image,
+    //                        this->keypoints_,
+    //                        this->descriptors_);
     return 0;
   }
 
@@ -175,7 +234,7 @@ namespace ak
   {
     std::vector<cv::DMatch> matches;
     matcher->match(previous_descriptors, last_descriptors, matches);
-    double min_distance = std::min_element(matches.begin(),
+    float min_distance = std::min_element(matches.begin(),
                                            matches.end(),
                                            [](const cv::DMatch& m1, const cv::DMatch& m2)
     {
@@ -184,7 +243,7 @@ namespace ak
     Frame::ptr_last_frame->best_matches_.clear();
     for(cv::DMatch& m : matches)
     {
-      if(m.distance < std::max<double>(min_distance*Frame::match_ratio_, 30.0))
+      if(m.distance < std::max<float>(min_distance*Frame::match_ratio_, 30.0))
       {
         Frame::ptr_last_frame->best_matches_.push_back(m);
       }
@@ -199,7 +258,7 @@ namespace ak
     matcher->match(ptr_last_keyframe->descriptors_,
                    ptr_current_frame->descriptors_,
                    matches);
-    double min_distance = std::min_element(matches.begin(),
+    float min_distance = std::min_element(matches.begin(),
                                           matches.end(),
                                           [](const cv::DMatch& m1, const cv::DMatch& m2)
     {
@@ -208,7 +267,7 @@ namespace ak
     ptr_last_keyframe->best_matches_.clear();
     for(cv::DMatch& m : matches)
     {
-      if(m.distance < std::max<double>(min_distance*Frame::match_ratio_, 30.0))
+      if(m.distance < std::max<float>(min_distance*Frame::match_ratio_, 30.0))
       {
         ptr_last_keyframe->best_matches_.push_back(m);
       }
@@ -281,10 +340,10 @@ namespace ak
                            cv::Mat& Rcw,
                            cv::Mat& tcw)
   {
-    if(ptr_current_frame->id_ == 1)
-    {
+    //if(ptr_current_frame->id_ == 1)
+    //{
       setRandomSeed(0);
-    }
+    //}
     MATCHED_POINTS_SET = std::vector<std::vector<cv::DMatch>>(MAX_ITERATION, std::vector<cv::DMatch>(8, cv::DMatch()));
     for(size_t i=0; i<MAX_ITERATION; ++i)
     {
@@ -302,7 +361,12 @@ namespace ak
     }
     cv::Mat matrix_H21, matrix_F21;
     std::vector<cv::DMatch> inliers_H, inliers_F;
-    //FindHomography(inliers_H, matrix_H21);
+    TIMER_START("FindHomographey");
+    auto score_H = FindHomography(inliers_H, matrix_H21);
+    TIMER_END();
+    TIMER_START("FindFundamental");
+    auto score_F = FindFundamental(inliers_F, matrix_F21);
+    TIMER_END();
     //std::thread threadHomoCompute(Frame::FindHomography,
     //                              std::ref(inliers_H),
     //                              std::ref(matrix_H21));
@@ -311,19 +375,19 @@ namespace ak
     //                              std::ref(matrix_F21));
     //threadHomoCompute.join();
     //threadFundCompute.join();
-    std::future<double> future_scoreH = std::async(Frame::FindHomography,
-                                                   std::ref(inliers_H),
-                                                   std::ref(matrix_H21));
-    std::future<double> future_scoreF = std::async(Frame::FindFundamental,
-                                                   std::ref(inliers_F),
-                                                   std::ref(matrix_F21));
+//    std::future<float> future_scoreH = std::async(Frame::FindHomography,
+//                                                   std::ref(inliers_H),
+//                                                   std::ref(matrix_H21));
+//    std::future<float> future_scoreF = std::async(Frame::FindFundamental,
+//                                                   std::ref(inliers_F),
+//                                                   std::ref(matrix_F21));
     AK_DLOG_INFO << "Initializing VO...";
-    double score_H = future_scoreH.get();
-    double score_F = future_scoreF.get();
-    //double score_F = Frame::FindFundamental(inliers_F, matrix_F21);
-    double ratio_homography = score_H / (score_H + score_F);
-    //AK_DLOG_INFO << "inliers_H : " << inliers_H.size();
-    //AK_DLOG_INFO << "inliers_F : " << inliers_F.size();
+//    float score_H = future_scoreH.get();
+//    float score_F = future_scoreF.get();
+    //float score_F = Frame::FindFundamental(inliers_F, matrix_F21);
+    float ratio_homography = score_H / (score_H + score_F);
+    AK_DLOG_INFO << "inliers_H : " << inliers_H.size();
+    AK_DLOG_INFO << "inliers_F : " << inliers_F.size();
     AK_DLOG_INFO << "ratio_homography: " << ratio_homography;
     if(ratio_homography > 0.40)
     {
@@ -352,7 +416,7 @@ namespace ak
     return false;
   }
 
-  double Frame::FindHomography(std::vector<cv::DMatch>& matched_inliers, cv::Mat& H21)
+  float Frame::FindHomography(std::vector<cv::DMatch>& matched_inliers, cv::Mat& H21)
   {
     AK_DLOG_INFO << "Find homography...";
     std::vector<cv::KeyPoint> normalized_kps_init, normalized_kps_cur;
@@ -362,28 +426,147 @@ namespace ak
     NormalizeKeyPoints(Frame::ptr_initialized_frame->keypoints_,
                        normalized_kps_init,
                        transform_init);
+//    AK_DLOG_INFO << "Mat1_homo: \n" << transform_init;
     NormalizeKeyPoints(Frame::ptr_current_frame->keypoints_,
                        normalized_kps_cur,
                        transform_cur);
+//    AK_DLOG_INFO << "Mat2_homo: \n" << transform_cur;
+
     cv::Mat transform_cur_transpose = transform_cur.t();
-    double score = 0.0;
+    float score = 0.0;
 
     std::vector<cv::KeyPoint> ransec_init_keypoints(8);
     std::vector<cv::KeyPoint> ransec_cur_keypoints(8);
 
     cv::Mat H21_tmp, H12_tmp;
-    double current_score;
+    float current_score;
     for(size_t iter=0; iter<MAX_ITERATION; ++iter)
     {
       for(auto n=0; n<8; ++n)
       {
-        ransec_init_keypoints[n] = normalized_kps_init[MATCHED_POINTS_SET[iter][n].queryIdx];
-        ransec_cur_keypoints[n] = normalized_kps_cur[MATCHED_POINTS_SET[iter][n].trainIdx];
+        auto queryIdx = MATCHED_POINTS_SET[iter][n].queryIdx;
+        auto trainIdx = MATCHED_POINTS_SET[iter][n].trainIdx;
+        ransec_init_keypoints[n] = normalized_kps_init[queryIdx];
+        ransec_cur_keypoints[n] = normalized_kps_cur[trainIdx];
       }
+
+//      //============================================================
+//      // Insection Test
+//        std::vector<cv::KeyPoint> keypoints_init;
+//        std::vector<cv::KeyPoint> keypoints_cur;
+//        std::vector<cv::KeyPoint> keypoints_init_norm;
+//        std::vector<cv::KeyPoint> keypoints_cur_norm;
+//        std::ifstream file_kps1("../data/keys1.txt");
+//        std::ifstream file_kps2("../data/keys2.txt");
+//        int kps1_count;
+//        int kps2_count;
+//        file_kps1 >> kps1_count;
+//        file_kps2 >> kps2_count;
+//        float x, y, p_size, angle, response, x_norm, y_norm, elem_mat;
+//        for(int i=0; i<kps1_count; ++i)
+//        {
+//          ReadPlainData(x, file_kps1);
+//          ReadPlainData(y, file_kps1);
+//          ReadPlainData(p_size, file_kps1);
+//          ReadPlainData(angle, file_kps1);
+//          ReadPlainData(response, file_kps1);
+//          keypoints_init.push_back(cv::KeyPoint(x, y, p_size, angle, response));
+//          ReadPlainData(x_norm, file_kps1);
+//          ReadPlainData(y_norm, file_kps1);
+//          ReadPlainData(p_size, file_kps1);
+//          keypoints_init_norm.push_back(cv::KeyPoint(x_norm, y_norm, p_size));
+//        }
+//        std::vector<float> pre_mat1;
+//
+//        for(int i=0; i<9; ++i)
+//        {
+//          ReadPlainData(elem_mat, file_kps1);
+//          pre_mat1.push_back(elem_mat);
+//        }
+//        cv::Mat temp_pre1 = cv::Mat(pre_mat1, CV_32F);
+//        cv::Mat t1 = temp_pre1.reshape(3,3).clone();
+//
+//        for(int i=0; i<kps2_count; ++i)
+//        {
+//          ReadPlainData(x, file_kps2);
+//          ReadPlainData(y, file_kps2);
+//          ReadPlainData(p_size, file_kps2);
+//          ReadPlainData(angle, file_kps2);
+//          ReadPlainData(response, file_kps2);
+//          keypoints_cur.push_back(cv::KeyPoint(x, y, p_size, angle, response));
+//          ReadPlainData(x_norm, file_kps2);
+//          ReadPlainData(y_norm, file_kps2);
+//          ReadPlainData(p_size, file_kps2);
+//          keypoints_cur_norm.push_back(cv::KeyPoint(x_norm, y_norm, p_size));
+//        }
+//        std::vector<float> pre_mat2;
+//        for(int i=0; i<9; ++i)
+//        {
+//          ReadPlainData(elem_mat, file_kps2);
+//          pre_mat2.push_back(elem_mat);
+//        }
+//        cv::Mat temp_pre2 = cv::Mat(pre_mat2, CV_32F);
+//        cv::Mat t2 = temp_pre2.reshape(3,3).clone();
+//        file_kps1.close();
+//        file_kps2.close();
+//        //===========
+//        std::ifstream file_ransec;
+//        file_ransec.open("../data/ransec_set.txt");
+//        //std::vector<cv::KeyPoint> kps_init_normalized;
+//        //std::vector<cv::KeyPoint> kps_cur_normalized;
+//        int iteration, num_ransec, iteration_all;
+//        //file_ransec >> iteration_all;
+//        ReadPlainData(iteration_all, file_ransec);
+//        //std::cout << "All_iteration: " << iteration_all << std::endl;
+//
+//        std::vector<float> pre_mat;
+//        int init_idx, cur_idx;
+//        std::vector<cv::KeyPoint> kps_norm_ransec_init(8);
+//        std::vector<cv::KeyPoint> kps_norm_ransec_cur(8);
+////        for(int iter=0; iter<iteration_all; ++iter)
+////        {
+//          for(int j=0; j<8; ++j)
+//          {
+//            ReadPlainData(iteration, file_ransec);
+//            ReadPlainData(num_ransec, file_ransec);
+//            ReadPlainData(init_idx, file_ransec);
+//            ReadPlainData(cur_idx, file_ransec);
+//            kps_norm_ransec_init[j] = keypoints_init_norm[init_idx];
+//            kps_norm_ransec_cur[j] = keypoints_cur_norm[cur_idx];
+//          }
+//          pre_mat.clear();
+//          for(int i=0; i<9; ++i)
+//          {
+//            ReadPlainData(elem_mat, file_ransec);
+//            pre_mat.push_back(elem_mat);
+//          }
+//          cv::Mat temp1 = cv::Mat(pre_mat, CV_32F);
+//          cv::Mat H21_read = temp1.reshape(3,3).clone();
+//          AK_DLOG_INFO << "H21_read:\n" << H21_read;
+//          NormalizeKeyPoints(keypoints_init,
+//                             keypoints_init_norm,
+//                             t1);
+//          NormalizeKeyPoints(keypoints_cur,
+//                             keypoints_cur_norm,
+//                             t2);
+//      // }
+//        //============================================================
       // ComputeH21
       cv::Mat H21_normalized = ComputeH21(ransec_init_keypoints, ransec_cur_keypoints);
       H21_tmp = transform_cur.inv() * H21_normalized * transform_init;
       H12_tmp = H21_tmp.inv();
+
+      //      AK_DLOG_INFO << "Compute_H21: \n" << H21_normalized;
+//      cv::Mat H21_normalized = ComputeH21(kps_norm_ransec_init, kps_norm_ransec_cur);
+//      H21_tmp = t2.inv() * H21_normalized * t1;
+//      H12_tmp = H21_tmp.inv();
+
+//      AK_DLOG_INFO << "t2:\n" << t2;
+//      AK_DLOG_INFO << "t2_inv:\n" << t2.inv();
+//      AK_DLOG_INFO << "t1:\n" << t1;
+
+//      AK_DLOG_INFO << "H21_" << iter << ":\n" << H21_tmp;
+//      AK_DLOG_INFO << "H12_" << iter << ":\n" << H12_tmp;
       // CheckH21 - sigma = 1.0
       current_score = CheckHomography(H21_tmp, H12_tmp, matched_inliers, 1.0);
       if( current_score > score )
@@ -395,7 +578,7 @@ namespace ak
     return score;
   }
 
-  double Frame::FindFundamental(std::vector<cv::DMatch>& matched_inliers, cv::Mat& F21)
+  float Frame::FindFundamental(std::vector<cv::DMatch>& matched_inliers, cv::Mat& F21)
   {
     AK_DLOG_INFO << "Find fundamental ...";
     std::vector<cv::KeyPoint> normalized_kps_init, normalized_kps_cur;
@@ -409,13 +592,14 @@ namespace ak
                        normalized_kps_cur,
                        transform_cur);
     cv::Mat transform_cur_transpose = transform_cur.t();
-    double score = 0.0;
+    float score = 0.0;
 
     std::vector<cv::KeyPoint> ransec_init_keypoints(8);
     std::vector<cv::KeyPoint> ransec_cur_keypoints(8);
 
     cv::Mat F21_tmp;
-    double current_score;
+    float current_score;
+    std::vector<cv::DMatch> ransec_matched_inliers;
     for(size_t iter=0; iter<MAX_ITERATION; ++iter)
     {
       for(auto n=0; n<8; ++n)
@@ -427,11 +611,12 @@ namespace ak
       cv::Mat F21_normalized = ComputeF21(ransec_init_keypoints, ransec_cur_keypoints);
       F21_tmp = transform_cur_transpose * F21_normalized * transform_init;
       // CheckF21 - sigma = 1.0
-      current_score = CheckFundamental(F21_tmp, matched_inliers, 1.0);
+      current_score = CheckFundamental(F21_tmp, ransec_matched_inliers, 1.0);
       if( current_score > score )
       {
         F21 = F21_tmp.clone();
         score = current_score;
+        matched_inliers = ransec_matched_inliers;
       }
     }
     return score;
@@ -441,8 +626,8 @@ namespace ak
                                  std::vector<cv::KeyPoint>& kps_normalized,
                                  cv::Mat& Transform)
   {
-    double mean_x = 0.0;
-    double mean_y = 0.0;
+    float mean_x = 0.0;
+    float mean_y = 0.0;
     const size_t KEYPOINT_SIZE = kps.size();
     kps_normalized.resize(KEYPOINT_SIZE);
     for(auto& kp: kps)
@@ -452,8 +637,8 @@ namespace ak
     }
     mean_x /= KEYPOINT_SIZE;
     mean_y /= KEYPOINT_SIZE;
-    double deviation_x = 0.0;
-    double deviation_y = 0.0;
+    float deviation_x = 0.0;
+    float deviation_y = 0.0;
     size_t i = 0;
     for(auto& kp: kps)
     {
@@ -465,47 +650,50 @@ namespace ak
     }
     deviation_x /= KEYPOINT_SIZE;
     deviation_y /= KEYPOINT_SIZE;
+    auto deviation_x_inv = 1.0 / deviation_x;
+    auto deviation_y_inv = 1.0 / deviation_y;
     for(auto& kp_normal: kps_normalized)
     {
-      kp_normal.pt.x /= deviation_x;
-      kp_normal.pt.y /= deviation_y;
+      kp_normal.pt.x *= deviation_x_inv;
+      kp_normal.pt.y *= deviation_y_inv;
     }
-    Transform = cv::Mat::eye(3, 3, CV_64F);
-    Transform.at<double>(0, 0) = 1. / deviation_x;
-    Transform.at<double>(1, 1) = 1. / deviation_y;
-    Transform.at<double>(0, 2) = -mean_x / deviation_y;
-    Transform.at<double>(1, 2) = -mean_y / deviation_y;
+    Transform = cv::Mat::eye(3, 3, CV_32F);
+    Transform.at<float>(0, 0) = deviation_x_inv;
+    Transform.at<float>(1, 1) = deviation_y_inv;
+    Transform.at<float>(0, 2) = -mean_x*deviation_x_inv;
+    Transform.at<float>(1, 2) = -mean_y*deviation_y_inv;
   }
 
   cv::Mat Frame::ComputeH21(const std::vector<cv::KeyPoint>& keypoints_init,
                             const std::vector<cv::KeyPoint>& keypoints_cur)
   {
     const int N = keypoints_init.size();
-    cv::Mat A(2*N, 9, CV_64F);
+    cv::Mat A(2*N, 9, CV_32F);
     for(int i=0; i<N; i++)
     {
-        const double u1 = keypoints_init[i].pt.x;
-        const double v1 = keypoints_init[i].pt.y;
-        const double u2 = keypoints_cur[i].pt.x;
-        const double v2 = keypoints_cur[i].pt.y;
-        A.at<double>(2*i,0) = 0.0;
-        A.at<double>(2*i,1) = 0.0;
-        A.at<double>(2*i,2) = 0.0;
-        A.at<double>(2*i,3) = -u1;
-        A.at<double>(2*i,4) = -v1;
-        A.at<double>(2*i,5) = -1;
-        A.at<double>(2*i,6) = v2*u1;
-        A.at<double>(2*i,7) = v2*v1;
-        A.at<double>(2*i,8) = v2;
-        A.at<double>(2*i+1,0) = u1;
-        A.at<double>(2*i+1,1) = v1;
-        A.at<double>(2*i+1,2) = 1;
-        A.at<double>(2*i+1,3) = 0.0;
-        A.at<double>(2*i+1,4) = 0.0;
-        A.at<double>(2*i+1,5) = 0.0;
-        A.at<double>(2*i+1,6) = -u2*u1;
-        A.at<double>(2*i+1,7) = -u2*v1;
-        A.at<double>(2*i+1,8) = -u2;
+        const float u1 = keypoints_init[i].pt.x;
+        const float v1 = keypoints_init[i].pt.y;
+        const float u2 = keypoints_cur[i].pt.x;
+        const float v2 = keypoints_cur[i].pt.y;
+        A.at<float>(2*i,0) = 0.0;
+        A.at<float>(2*i,1) = 0.0;
+        A.at<float>(2*i,2) = 0.0;
+        A.at<float>(2*i,3) = -u1;
+        A.at<float>(2*i,4) = -v1;
+        A.at<float>(2*i,5) = -1;
+        A.at<float>(2*i,6) = v2*u1;
+        A.at<float>(2*i,7) = v2*v1;
+        A.at<float>(2*i,8) = v2;
+
+        A.at<float>(2*i+1,0) = u1;
+        A.at<float>(2*i+1,1) = v1;
+        A.at<float>(2*i+1,2) = 1;
+        A.at<float>(2*i+1,3) = 0.0;
+        A.at<float>(2*i+1,4) = 0.0;
+        A.at<float>(2*i+1,5) = 0.0;
+        A.at<float>(2*i+1,6) = -u2*u1;
+        A.at<float>(2*i+1,7) = -u2*v1;
+        A.at<float>(2*i+1,8) = -u2;
     }
     cv::Mat u,w,vt;
     cv::SVDecomp(A,w,u,vt,cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
@@ -516,64 +704,64 @@ namespace ak
                             const std::vector<cv::KeyPoint>& keypoints_cur)
   {
     const int N = keypoints_init.size();
-    cv::Mat A(N,9,CV_64F);
+    cv::Mat A(N,9,CV_32F);
 
     for(int i=0; i<N; i++)
     {
-        const double u1 = keypoints_init[i].pt.x;
-        const double v1 = keypoints_init[i].pt.y;
-        const double u2 = keypoints_cur[i].pt.x;
-        const double v2 = keypoints_cur[i].pt.y;
+        const float u1 = keypoints_init[i].pt.x;
+        const float v1 = keypoints_init[i].pt.y;
+        const float u2 = keypoints_cur[i].pt.x;
+        const float v2 = keypoints_cur[i].pt.y;
 
-        A.at<double>(i,0) = u2*u1;
-        A.at<double>(i,1) = u2*v1;
-        A.at<double>(i,2) = u2;
-        A.at<double>(i,3) = v2*u1;
-        A.at<double>(i,4) = v2*v1;
-        A.at<double>(i,5) = v2;
-        A.at<double>(i,6) = u1;
-        A.at<double>(i,7) = v1;
-        A.at<double>(i,8) = 1;
+        A.at<float>(i,0) = u2*u1;
+        A.at<float>(i,1) = u2*v1;
+        A.at<float>(i,2) = u2;
+        A.at<float>(i,3) = v2*u1;
+        A.at<float>(i,4) = v2*v1;
+        A.at<float>(i,5) = v2;
+        A.at<float>(i,6) = u1;
+        A.at<float>(i,7) = v1;
+        A.at<float>(i,8) = 1;
     }
 
     cv::Mat u,w,vt;
     cv::SVDecomp(A,w,u,vt,cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
     cv::Mat Fpre = vt.row(8).reshape(0, 3);
     cv::SVDecomp(Fpre,w,u,vt,cv::SVD::MODIFY_A | cv::SVD::FULL_UV);
-    w.at<double>(2)=0;
+    w.at<float>(2)=0;
     return  u*cv::Mat::diag(w)*vt;
   }
 
-  double Frame::CheckHomography(const cv::Mat& H21,
+  float Frame::CheckHomography(const cv::Mat& H21,
                                 const cv::Mat& H12,
                                 std::vector<cv::DMatch>& matched_inliers,
-                                double sigma)
+                                float sigma)
   {
     const size_t N = Frame::ptr_initialized_frame->best_matches_.size();
 
-    const double h11 = H21.at<double>(0,0);
-    const double h12 = H21.at<double>(0,1);
-    const double h13 = H21.at<double>(0,2);
-    const double h21 = H21.at<double>(1,0);
-    const double h22 = H21.at<double>(1,1);
-    const double h23 = H21.at<double>(1,2);
-    const double h31 = H21.at<double>(2,0);
-    const double h32 = H21.at<double>(2,1);
-    const double h33 = H21.at<double>(2,2);
+    const float h11 = H21.at<float>(0,0);
+    const float h12 = H21.at<float>(0,1);
+    const float h13 = H21.at<float>(0,2);
+    const float h21 = H21.at<float>(1,0);
+    const float h22 = H21.at<float>(1,1);
+    const float h23 = H21.at<float>(1,2);
+    const float h31 = H21.at<float>(2,0);
+    const float h32 = H21.at<float>(2,1);
+    const float h33 = H21.at<float>(2,2);
 
-    const double h11inv = H12.at<double>(0,0);
-    const double h12inv = H12.at<double>(0,1);
-    const double h13inv = H12.at<double>(0,2);
-    const double h21inv = H12.at<double>(1,0);
-    const double h22inv = H12.at<double>(1,1);
-    const double h23inv = H12.at<double>(1,2);
-    const double h31inv = H12.at<double>(2,0);
-    const double h32inv = H12.at<double>(2,1);
-    const double h33inv = H12.at<double>(2,2);
+    const float h11inv = H12.at<float>(0,0);
+    const float h12inv = H12.at<float>(0,1);
+    const float h13inv = H12.at<float>(0,2);
+    const float h21inv = H12.at<float>(1,0);
+    const float h22inv = H12.at<float>(1,1);
+    const float h23inv = H12.at<float>(1,2);
+    const float h31inv = H12.at<float>(2,0);
+    const float h32inv = H12.at<float>(2,1);
+    const float h33inv = H12.at<float>(2,2);
 
-    double score = 0;
-    const double th = 5.991;
-    const double inv_sigma_square = 1.0 / (sigma * sigma);
+    float score = 0;
+    const float th = 5.991;
+    const float inv_sigma_square = 1.0 / (sigma * sigma);
     for(size_t i=0; i<N; ++i)
     {
       bool isInliers = true;
@@ -582,15 +770,15 @@ namespace ak
       const auto& kp_init = Frame::ptr_initialized_frame->keypoints_[index_kp_init];
       const auto& kp_cur = Frame::ptr_current_frame->keypoints_[index_kp_cur];
 
-      const double u1 = kp_init.pt.x;
-      const double v1 = kp_init.pt.y;
-      const double u2 = kp_cur.pt.x;
-      const double v2 = kp_cur.pt.x;
-      const double w2in1inv = 1.0/(h31inv*u2+h32inv*v2+h33inv);
-      const double u2in1 = (h11inv*u2+h12inv*v2+h13inv)*w2in1inv;
-      const double v2in1 = (h21inv*u2+h22inv*v2+h23inv)*w2in1inv;
-      const double squareDist1 = (u1-u2in1)*(u1-u2in1)+(v1-v2in1)*(v1-v2in1);
-      const double chiSquare1 = squareDist1*inv_sigma_square;
+      const float u1 = kp_init.pt.x;
+      const float v1 = kp_init.pt.y;
+      const float u2 = kp_cur.pt.x;
+      const float v2 = kp_cur.pt.y;
+      const float w2in1inv = 1.0/(h31inv*u2+h32inv*v2+h33inv);
+      const float u2in1 = (h11inv*u2+h12inv*v2+h13inv)*w2in1inv;
+      const float v2in1 = (h21inv*u2+h22inv*v2+h23inv)*w2in1inv;
+      const float squareDist1 = (u1-u2in1)*(u1-u2in1)+(v1-v2in1)*(v1-v2in1);
+      const float chiSquare1 = squareDist1*inv_sigma_square;
 
       if(chiSquare1>th)
       {
@@ -604,11 +792,11 @@ namespace ak
       // Reprojection error in second image
       // x1in2 = H21*x1
 
-      const double w1in2inv = 1.0/(h31*u1+h32*v1+h33);
-      const double u1in2 = (h11*u1+h12*v1+h13)*w1in2inv;
-      const double v1in2 = (h21*u1+h22*v1+h23)*w1in2inv;
-      const double squareDist2 = (u2-u1in2)*(u2-u1in2)+(v2-v1in2)*(v2-v1in2);
-      const double chiSquare2 = squareDist2*inv_sigma_square;
+      const float w1in2inv = 1.0/(h31*u1+h32*v1+h33);
+      const float u1in2 = (h11*u1+h12*v1+h13)*w1in2inv;
+      const float v1in2 = (h21*u1+h22*v1+h23)*w1in2inv;
+      const float squareDist2 = (u2-u1in2)*(u2-u1in2)+(v2-v1in2)*(v2-v1in2);
+      const float chiSquare2 = squareDist2*inv_sigma_square;
 
       if(chiSquare2>th)
       {
@@ -629,26 +817,27 @@ namespace ak
     return score;
   }
 
-  double Frame::CheckFundamental(const cv::Mat& F21,
+  float Frame::CheckFundamental(const cv::Mat& F21,
                                  std::vector<cv::DMatch>& matched_inliers,
-                                 double sigma)
+                                 float sigma)
   {
+    matched_inliers.clear();
     const int N = Frame::ptr_initialized_frame->best_matches_.size();
-    const double f11 = F21.at<double>(0,0);
-    const double f12 = F21.at<double>(0,1);
-    const double f13 = F21.at<double>(0,2);
-    const double f21 = F21.at<double>(1,0);
-    const double f22 = F21.at<double>(1,1);
-    const double f23 = F21.at<double>(1,2);
-    const double f31 = F21.at<double>(2,0);
-    const double f32 = F21.at<double>(2,1);
-    const double f33 = F21.at<double>(2,2);
+    const float f11 = F21.at<float>(0,0);
+    const float f12 = F21.at<float>(0,1);
+    const float f13 = F21.at<float>(0,2);
+    const float f21 = F21.at<float>(1,0);
+    const float f22 = F21.at<float>(1,1);
+    const float f23 = F21.at<float>(1,2);
+    const float f31 = F21.at<float>(2,0);
+    const float f32 = F21.at<float>(2,1);
+    const float f33 = F21.at<float>(2,2);
 
-    double score = 0;
-    const double th = 3.841;
-    const double thScore = 5.991;
+    float score = 0;
+    const float th = 3.841;
+    const float thScore = 5.991;
 
-    const double invSigmaSquare = 1.0/(sigma*sigma);
+    const float invSigmaSquare = 1.0/(sigma*sigma);
 
     for(int i=0; i<N; i++)
     {
@@ -659,21 +848,21 @@ namespace ak
       const auto& kp_init = Frame::ptr_initialized_frame->keypoints_[index_kp_init];
       const auto& kp_cur = Frame::ptr_current_frame->keypoints_[index_kp_cur];
 
-      const double u1 = kp_init.pt.x;
-      const double v1 = kp_init.pt.y;
-      const double u2 = kp_cur.pt.x;
-      const double v2 = kp_cur.pt.x;
+      const float u1 = kp_init.pt.x;
+      const float v1 = kp_init.pt.y;
+      const float u2 = kp_cur.pt.x;
+      const float v2 = kp_cur.pt.y;
 
       // Reprojection error in second image
       // l2=F21x1=(a2,b2,c2)
 
-      const double a2 = f11*u1+f12*v1+f13;
-      const double b2 = f21*u1+f22*v1+f23;
-      const double c2 = f31*u1+f32*v1+f33;
+      const float a2 = f11*u1+f12*v1+f13;
+      const float b2 = f21*u1+f22*v1+f23;
+      const float c2 = f31*u1+f32*v1+f33;
 
-      const double num2 = a2*u2+b2*v2+c2;
-      const double squareDist1 = num2*num2/(a2*a2+b2*b2);
-      const double chiSquare1 = squareDist1*invSigmaSquare;
+      const float num2 = a2*u2+b2*v2+c2;
+      const float squareDist1 = num2*num2/(a2*a2+b2*b2);
+      const float chiSquare1 = squareDist1*invSigmaSquare;
 
       if(chiSquare1>th)
       {
@@ -686,13 +875,13 @@ namespace ak
 
       // Reprojection error in second image
       // l1 =x2tF21=(a1,b1,c1)
-      const double a1 = f11*u2+f21*v2+f31;
-      const double b1 = f12*u2+f22*v2+f32;
-      const double c1 = f13*u2+f23*v2+f33;
+      const float a1 = f11*u2+f21*v2+f31;
+      const float b1 = f12*u2+f22*v2+f32;
+      const float c1 = f13*u2+f23*v2+f33;
 
-      const double num1 = a1*u1+b1*v1+c1;
-      const double squareDist2 = num1*num1/(a1*a1+b1*b1);
-      const double chiSquare2 = squareDist2*invSigmaSquare;
+      const float num1 = a1*u1+b1*v1+c1;
+      const float squareDist2 = num1*num1/(a1*a1+b1*b1);
+      const float chiSquare2 = squareDist2*invSigmaSquare;
 
       if(chiSquare2>th)
       {
@@ -707,6 +896,7 @@ namespace ak
       {
         //AK_DLOG_ERROR << "One inliers captured.";
         matched_inliers.push_back(Frame::ptr_initialized_frame->best_matches_[i]);
+        AK_DLOG_WARNING << matched_inliers.size();
       }
     }
     //AK_DLOG_ERROR << "F-inliers.size = " << matched_inliers.size();
@@ -719,7 +909,7 @@ namespace ak
                                   cv::Mat& R21,
                                   cv::Mat& t21,
                                   std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
-                                  double min_parallax,
+                                  float min_parallax,
                                   int min_triangulated)
   {
     //AK_DLOG_WARNING << "Reconstructing Homography";
@@ -732,11 +922,11 @@ namespace ak
     cv::SVD::compute(A, w, U, Vt, cv::SVD::FULL_UV);
     V = Vt.t();
 
-    double s = cv::determinant(U) * cv::determinant(Vt);
+    float s = cv::determinant(U) * cv::determinant(Vt);
 
-    double d1 = w.at<double>(0);
-    double d2 = w.at<double>(1);
-    double d3 = w.at<double>(2);
+    float d1 = w.at<float>(0);
+    float d2 = w.at<float>(1);
+    float d3 = w.at<float>(2);
 
     if(d1/d2<1.00001 || d2/d3<1.00001)
     {
@@ -748,82 +938,82 @@ namespace ak
     vector_t.reserve(8);
     vector_n.reserve(8);
 
-    double aux1 = sqrt((d1*d1-d2*d2)/(d1*d1-d3*d3));
-    double aux3 = sqrt((d2*d2-d3*d3)/(d1*d1-d3*d3));
-    double x1[] = {aux1,aux1,-aux1,-aux1};
-    double x3[] = {aux3,-aux3,aux3,-aux3};
+    float aux1 = sqrt((d1*d1-d2*d2)/(d1*d1-d3*d3));
+    float aux3 = sqrt((d2*d2-d3*d3)/(d1*d1-d3*d3));
+    float x1[] = {aux1,aux1,-aux1,-aux1};
+    float x3[] = {aux3,-aux3,aux3,-aux3};
 
     //case d'=d2
-    double aux_stheta = sqrt((d1*d1-d2*d2)*(d2*d2-d3*d3))/((d1+d3)*d2);
+    float aux_stheta = sqrt((d1*d1-d2*d2)*(d2*d2-d3*d3))/((d1+d3)*d2);
 
-    double ctheta = (d2*d2+d1*d3)/((d1+d3)*d2);
-    double stheta[] = {aux_stheta, -aux_stheta, -aux_stheta, aux_stheta};
+    float ctheta = (d2*d2+d1*d3)/((d1+d3)*d2);
+    float stheta[] = {aux_stheta, -aux_stheta, -aux_stheta, aux_stheta};
 
     for(int i=0; i<4; i++)
     {
-        cv::Mat Rp=cv::Mat::eye(3,3,CV_64F);
-        Rp.at<double>(0,0)=ctheta;
-        Rp.at<double>(0,2)=-stheta[i];
-        Rp.at<double>(2,0)=stheta[i];
-        Rp.at<double>(2,2)=ctheta;
+        cv::Mat Rp=cv::Mat::eye(3,3,CV_32F);
+        Rp.at<float>(0,0)=ctheta;
+        Rp.at<float>(0,2)=-stheta[i];
+        Rp.at<float>(2,0)=stheta[i];
+        Rp.at<float>(2,2)=ctheta;
 
         cv::Mat R = s*U*Rp*Vt;
         vector_R.push_back(R);
 
-        cv::Mat tp(3,1,CV_64F);
-        tp.at<double>(0)=x1[i];
-        tp.at<double>(1)=0;
-        tp.at<double>(2)=-x3[i];
+        cv::Mat tp(3,1,CV_32F);
+        tp.at<float>(0)=x1[i];
+        tp.at<float>(1)=0;
+        tp.at<float>(2)=-x3[i];
         tp*=d1-d3;
 
         cv::Mat t = U*tp;
         vector_t.push_back(t/cv::norm(t));
 
-        cv::Mat np(3,1,CV_64F);
-        np.at<double>(0)=x1[i];
-        np.at<double>(1)=0;
-        np.at<double>(2)=x3[i];
+        cv::Mat np(3,1,CV_32F);
+        np.at<float>(0)=x1[i];
+        np.at<float>(1)=0;
+        np.at<float>(2)=x3[i];
 
         cv::Mat n = V*np;
-        if(n.at<double>(2)<0)
+        if(n.at<float>(2)<0)
             n=-n;
         vector_n.push_back(n);
     }
 
     //case d'=-d2
-    double aux_sphi = sqrt((d1*d1-d2*d2)*(d2*d2-d3*d3))/((d1-d3)*d2);
+    float aux_sphi = sqrt((d1*d1-d2*d2)*(d2*d2-d3*d3))/((d1-d3)*d2);
 
-    double cphi = (d1*d3-d2*d2)/((d1-d3)*d2);
-    double sphi[] = {aux_sphi, -aux_sphi, -aux_sphi, aux_sphi};
+    float cphi = (d1*d3-d2*d2)/((d1-d3)*d2);
+    float sphi[] = {aux_sphi, -aux_sphi, -aux_sphi, aux_sphi};
 
     for(int i=0; i<4; i++)
     {
-        cv::Mat Rp=cv::Mat::eye(3,3,CV_64F);
-        Rp.at<double>(0,0)=cphi;
-        Rp.at<double>(0,2)=sphi[i];
-        Rp.at<double>(1,1)=-1;
-        Rp.at<double>(2,0)=sphi[i];
-        Rp.at<double>(2,2)=-cphi;
+        cv::Mat Rp=cv::Mat::eye(3,3,CV_32F);
+        Rp.at<float>(0,0)=cphi;
+        Rp.at<float>(0,2)=sphi[i];
+        Rp.at<float>(1,1)=-1;
+        Rp.at<float>(2,0)=sphi[i];
+        Rp.at<float>(2,2)=-cphi;
 
         cv::Mat R = s*U*Rp*Vt;
         vector_R.push_back(R);
 
-        cv::Mat tp(3,1,CV_64F);
-        tp.at<double>(0)=x1[i];
-        tp.at<double>(1)=0;
-        tp.at<double>(2)=x3[i];
+        cv::Mat tp(3,1,CV_32F);
+        tp.at<float>(0)=x1[i];
+        tp.at<float>(1)=0;
+        tp.at<float>(2)=x3[i];
         tp*=d1+d3;
 
         cv::Mat t = U*tp;
         vector_t.push_back(t/cv::norm(t));
 
-        cv::Mat np(3,1,CV_64F);
-        np.at<double>(0)=x1[i];
-        np.at<double>(1)=0;
-        np.at<double>(2)=x3[i];
+        cv::Mat np(3,1,CV_32F);
+        np.at<float>(0)=x1[i];
+        np.at<float>(1)=0;
+        np.at<float>(2)=x3[i];
 
         cv::Mat n = V*np;
-        if(n.at<double>(2)<0)
+        if(n.at<float>(2)<0)
             n=-n;
         vector_n.push_back(n);
     }
@@ -831,7 +1021,7 @@ namespace ak
     int bestGood = 0;
     int secondBestGood = 0;    
     int bestSolutionIdx = -1;
-    double bestParallax = -1;
+    float bestParallax = -1;
 
     std::vector<std::pair<size_t, cv::Point3f>> bestP3D;
     std::vector<std::pair<size_t, cv::Point3f>> bestTriangulated;
@@ -840,7 +1030,7 @@ namespace ak
     // We reconstruct all hypotheses and check in terms of triangulated points and parallax
     for(size_t i=0; i<8; i++)
     {
-      double parallaxi{0.0};
+      float parallaxi{0.0};
       std::vector<std::pair<size_t, cv::Point3f>> vP3Di;
       //std::vector<std::pair<size_t, cv::Point3f>> vbTriangulatedi;
       //int nGood = CheckRT(vR[i],vt[i],mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K,vP3Di, 4.0*mSigma2, vbTriangulatedi, parallaxi);
@@ -888,18 +1078,22 @@ namespace ak
                                   cv::Mat& R21,
                                   cv::Mat& t21,
                                   std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
-                                  double min_parallax,
+                                  float min_parallax,
                                   int min_triangulated)
   {
     //AK_DLOG_WARNING << "Reconstructing Fundamental";
 
     // Compute Essential Matrix from Fundamental Matrix
+//    std::cout << "K: \n" << K << std::endl;
+//    std::cout << "F21: \n" << F21 << std::endl;
+
     cv::Mat E21 = K.t()*F21*K;
 
     cv::Mat R1, R2, t;
 
     // Recover the 4 motion hypotheses
-    DecomposeE(E21,R1,R2,t);  
+    DecomposeE(E21,R1,R2,t);
+
 
     cv::Mat t1=t;
     cv::Mat t2=-t;
@@ -909,12 +1103,13 @@ namespace ak
     std::vector<std::pair<size_t, cv::Point3f>> bestP3D;
     std::vector<std::pair<size_t, cv::Point3f>> vP3D1, vP3D2, vP3D3, vP3D4;
     std::vector<std::pair<size_t, cv::Point3f>> bestTriangulated1,bestTriangulated2,bestTriangulated3, bestTriangulated4;
-    double parallax1,parallax2, parallax3, parallax4;
+    float parallax1,parallax2, parallax3, parallax4;
 
     //int nGood1 = CheckRT(R1,t1,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D1, 4.0*mSigma2, vbTriangulated1, parallax1);
     //int nGood2 = CheckRT(R2,t1,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D2, 4.0*mSigma2, vbTriangulated2, parallax2);
     //int nGood3 = CheckRT(R1,t2,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D3, 4.0*mSigma2, vbTriangulated3, parallax3);
     //int nGood4 = CheckRT(R2,t2,mvKeys1,mvKeys2,mvMatches12,vbMatchesInliers,K, vP3D4, 4.0*mSigma2, vbTriangulated4, parallax4);
+
     int nGood1 = CheckRT(R1,
                          t1,
                          Frame::ptr_initialized_frame->keypoints_,
@@ -973,7 +1168,7 @@ namespace ak
     // If there is not a clear winner or not enough triangulated points reject initialization
     if(maxGood<nMinGood || nsimilar>1)
     {
-      AK_DLOG_ERROR << "Triangulated is too less."
+      AK_DLOG_ERROR << "Triangulated is too less.";
       return false;
     }
 
@@ -1036,30 +1231,30 @@ namespace ak
                      const std::vector<cv::DMatch>& matched_inliers,
                      const cv::Mat& K,
                      std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
-                     double th2,
-                     double& parallax
+                     float th2,
+                     float& parallax
                      )
   {
     // Calibration parameters
-    const double fx = K.at<double>(0,0);
-    const double fy = K.at<double>(1,1);
-    const double cx = K.at<double>(0,2);
-    const double cy = K.at<double>(1,2);
+    const float fx = K.at<float>(0,0);
+    const float fy = K.at<float>(1,1);
+    const float cx = K.at<float>(0,2);
+    const float cy = K.at<float>(1,2);
 
     //vbGood = vector<bool>(vKeys1.size(),false);
     //vP3D.resize(vKeys1.size()); // Just insert pair
 
-    std::vector<double> vCosParallax;
+    std::vector<float> vCosParallax;
     vCosParallax.reserve(matched_inliers.size());
 
     // Camera 1 Projection Matrix K[I|0]
-    cv::Mat P1(3,4,CV_64F,cv::Scalar(0));
+    cv::Mat P1(3,4,CV_32F,cv::Scalar(0));
     K.copyTo(P1.rowRange(0,3).colRange(0,3));
 
-    cv::Mat O1 = cv::Mat::zeros(3,1,CV_64F);
+    cv::Mat O1 = cv::Mat::zeros(3,1,CV_32F);
 
     // Camera 2 Projection Matrix K[R|t]
-    cv::Mat P2(3,4,CV_64F);
+    cv::Mat P2(3,4,CV_32F);
     R.copyTo(P2.rowRange(0,3).colRange(0,3));
     t.copyTo(P2.rowRange(0,3).col(3));
     P2 = K*P2;
@@ -1070,7 +1265,9 @@ namespace ak
 
     //auto triangulated_matches = matched_inliers;
     std::vector<std::pair<size_t, cv::Point3f>> triangulated_matches;
-    for(size_t i=0, iend=matched_inliers.size();i<iend;++i)
+
+    size_t match_size = matched_inliers.size();
+    for(size_t i=0; i<match_size; ++i)
     {
       //if(!vbMatchesInliers[i])
       //    continue;
@@ -1078,11 +1275,12 @@ namespace ak
       const cv::KeyPoint &kp1 = keypoints_last[matched_inliers[i].queryIdx];
       const cv::KeyPoint &kp2 = keypoints_cur[matched_inliers[i].trainIdx];
       //cv::Mat p3dC1;
-      cv::Mat p3dC1 = cv::Mat(3, 1, CV_64F);
+      cv::Mat p3dC1 = cv::Mat(3, 1, CV_32F);
 
+//      TIMER_START("ReconFund_Triangulate");
       Triangulate(kp1,kp2,P1,P2,p3dC1);
-
-      if(!isfinite(p3dC1.at<double>(0)) || !isfinite(p3dC1.at<double>(1)) || !isfinite(p3dC1.at<double>(2)))
+//      TIMER_END();
+      if(!isfinite(p3dC1.at<float>(0)) || !isfinite(p3dC1.at<float>(1)) || !isfinite(p3dC1.at<float>(2)))
       {
           //vbGood[vMatches12[i].first]=false;
           // Remove this match OR just ignore it
@@ -1091,48 +1289,48 @@ namespace ak
 
       // Check parallax
       cv::Mat normal1 = p3dC1 - O1;
-      double dist1 = cv::norm(normal1);
+      float dist1 = cv::norm(normal1);
 
       cv::Mat normal2 = p3dC1 - O2;
-      double dist2 = cv::norm(normal2);
+      float dist2 = cv::norm(normal2);
 
-      double cosParallax = normal1.dot(normal2)/(dist1*dist2);
+      float cosParallax = normal1.dot(normal2)/(dist1*dist2);
 
       // Check depth in front of first camera (only if enough parallax, as "infinite" points can easily go to negative depth)
-      if(p3dC1.at<double>(2)<=0 && cosParallax<0.99998)
+      if(p3dC1.at<float>(2)<=0 && cosParallax<0.99998)
         continue;
 
       // Check depth in front of second camera (only if enough parallax, as "infinite" points can easily go to negative depth)
       cv::Mat p3dC2 = R*p3dC1+t;
 
-      if(p3dC2.at<double>(2)<=0 && cosParallax<0.99998)
+      if(p3dC2.at<float>(2)<=0 && cosParallax<0.99998)
         continue;
 
       // Check reprojection error in first image
-      double im1x, im1y;
-      double invZ1 = 1.0/p3dC1.at<double>(2);
-      im1x = fx*p3dC1.at<double>(0)*invZ1+cx;
-      im1y = fy*p3dC1.at<double>(1)*invZ1+cy;
+      float im1x, im1y;
+      float invZ1 = 1.0/p3dC1.at<float>(2);
+      im1x = fx*p3dC1.at<float>(0)*invZ1+cx;
+      im1y = fy*p3dC1.at<float>(1)*invZ1+cy;
 
-      double squareError1 = (im1x-kp1.pt.x)*(im1x-kp1.pt.x)+(im1y-kp1.pt.y)*(im1y-kp1.pt.y);
+      float squareError1 = (im1x-kp1.pt.x)*(im1x-kp1.pt.x)+(im1y-kp1.pt.y)*(im1y-kp1.pt.y);
 
       if(squareError1>th2)
         continue;
 
       // Check reprojection error in second image
-      double im2x, im2y;
-      double invZ2 = 1.0/p3dC2.at<double>(2);
-      im2x = fx*p3dC2.at<double>(0)*invZ2+cx;
-      im2y = fy*p3dC2.at<double>(1)*invZ2+cy;
+      float im2x, im2y;
+      float invZ2 = 1.0/p3dC2.at<float>(2);
+      im2x = fx*p3dC2.at<float>(0)*invZ2+cx;
+      im2y = fy*p3dC2.at<float>(1)*invZ2+cy;
 
-      double squareError2 = (im2x-kp2.pt.x)*(im2x-kp2.pt.x)+(im2y-kp2.pt.y)*(im2y-kp2.pt.y);
+      float squareError2 = (im2x-kp2.pt.x)*(im2x-kp2.pt.x)+(im2y-kp2.pt.y)*(im2y-kp2.pt.y);
 
       if(squareError2>th2)
         continue;
 
       vCosParallax.push_back(cosParallax);
-      //vP3D[vMatches12[i].first] = cv::Point3f(p3dC1.at<double>(0),p3dC1.at<double>(1),p3dC1.at<double>(2));
-      auto landmark = cv::Point3f(p3dC1.at<double>(0),p3dC1.at<double>(1),p3dC1.at<double>(2));
+      //vP3D[vMatches12[i].first] = cv::Point3f(p3dC1.at<float>(0),p3dC1.at<float>(1),p3dC1.at<float>(2));
+      auto landmark = cv::Point3f(p3dC1.at<float>(0),p3dC1.at<float>(1),p3dC1.at<float>(2));
       init_landmarks.push_back(std::make_pair(matched_inliers[i].queryIdx, landmark));
       
       nGood++;
@@ -1142,6 +1340,7 @@ namespace ak
         //enable i as good keypoints;
         ;
     }
+
 
     if(nGood>0)
     {
@@ -1162,7 +1361,7 @@ namespace ak
                           const cv::Mat& pose_cur,
                           cv::Mat& x3D)
   {
-    cv::Mat A(4,4,CV_64F);
+    cv::Mat A(4,4,CV_32F);
 
     A.row(0) = kp_init.pt.x*pose_init.row(2)-pose_init.row(0);
     A.row(1) = kp_init.pt.y*pose_init.row(2)-pose_init.row(1);
@@ -1172,7 +1371,7 @@ namespace ak
     cv::Mat u,w,vt;
     cv::SVD::compute(A,w,u,vt,cv::SVD::MODIFY_A| cv::SVD::FULL_UV);
     x3D = vt.row(3).t();
-    x3D = x3D.rowRange(0,3)/x3D.at<double>(3);
+    x3D = x3D.rowRange(0,3)/x3D.at<float>(3);
   }
 
   void Frame::DecomposeE(const cv::Mat& E,
@@ -1186,10 +1385,10 @@ namespace ak
     u.col(2).copyTo(t);
     t=t/cv::norm(t);
 
-    cv::Mat W(3,3,CV_64F,cv::Scalar(0));
-    W.at<double>(0,1)=-1;
-    W.at<double>(1,0)=1;
-    W.at<double>(2,2)=1;
+    cv::Mat W(3,3,CV_32F,cv::Scalar(0));
+    W.at<float>(0,1)=-1;
+    W.at<float>(1,0)=1;
+    W.at<float>(2,2)=1;
 
     R1 = u*W*vt;
     if(cv::determinant(R1)<0)
@@ -1198,5 +1397,107 @@ namespace ak
     R2 = u*W.t()*vt;
     if(cv::determinant(R2)<0)
       R2=-R2;
+  }
+
+  void Frame::assignFeaturePointToGrid()
+  {
+    auto kp_size = this->keypoints_.size();
+//    const size_t pre_assign_mem_size = 0.5f * kp_size / (IMAGE_COLS * IMAGE_ROWS);
+    //for(size_t col=0; col<IMAGE_COLS; ++col)
+    //{
+    //  for(size_t row=0; row<IMAGE_ROWS; ++row)
+    //  {
+    //    this->keypoints_grid_[col][row].reserve(pre_assign_mem_size);
+    //  }
+    //}
+    for(size_t idx=0; idx<kp_size; ++idx)
+    {
+      const cv::KeyPoint& kp = this->keypoints_[idx];
+      size_t grid_pos_x, grid_pos_y;
+//      cv::KeyPoint kp(832, 54, 31, 36.1879578, 143);
+      if(this->getGridPosition(kp, grid_pos_x, grid_pos_y))
+      {
+        this->keypoints_grid_[grid_pos_x][grid_pos_y].push_back(idx);
+      }
+    }
+  }
+
+  bool Frame::getGridPosition(const cv::KeyPoint& kp,
+                              size_t& pos_x,
+                              size_t& pos_y)
+  {
+    pos_x = round((kp.pt.x - this->grid_property_.min_x)*this->grid_property_.grid_width_inv);
+    pos_y = round((kp.pt.y - this->grid_property_.min_y)*this->grid_property_.grid_height_inv);
+    if(pos_x<0 || pos_x>=IMAGE_COLS || pos_y<0 || pos_y>=IMAGE_ROWS)
+    {
+      return false;
+    }
+    return true;
+  }
+
+  std::vector<size_t> Frame::getCandidateKeypoints(const float& x,
+                                                   const float& y,
+                                                   const float& radium,
+                                                   const int& min_pyramid_level,
+                                                   const int& max_pyramid_level)
+  {
+    std::vector<size_t> candidate_to_match_keypoints;
+    candidate_to_match_keypoints.reserve(this->keypoints_.size());
+
+    auto min_x = this->grid_property_.min_x;
+    auto min_y = this->grid_property_.min_y;
+    auto max_x = this->grid_property_.max_x;
+    auto max_y = this->grid_property_.max_y;
+    auto grid_width_inv = this->grid_property_.grid_width_inv;
+    auto grid_height_inv = this->grid_property_.grid_height_inv;
+
+    const size_t nMinCellX = std::max(0,(int)floor((x-min_x-radium)*grid_width_inv));
+    if(nMinCellX>=IMAGE_COLS)
+        return candidate_to_match_keypoints;
+
+    const size_t nMaxCellX = std::min((int)IMAGE_COLS-1,(int)ceil((x-min_x+radium)*grid_width_inv));
+    if(nMaxCellX<0)
+        return candidate_to_match_keypoints;
+
+    const size_t nMinCellY = std::max(0,(int)floor((y-min_y-radium)*grid_height_inv));
+    if(nMinCellY>=IMAGE_ROWS)
+        return candidate_to_match_keypoints;
+
+    const size_t nMaxCellY = std::min((int)IMAGE_ROWS-1,(int)ceil((y-min_y+radium)*grid_height_inv));
+    if(nMaxCellY<0)
+        return candidate_to_match_keypoints;
+
+    const bool bCheckLevels = (min_pyramid_level>0) || (max_pyramid_level>=0);
+
+    for(size_t ix = nMinCellX; ix<=nMaxCellX; ix++)
+    {
+        for(size_t iy = nMinCellY; iy<=nMaxCellY; iy++)
+        {
+            const std::vector<size_t> vCell = keypoints_grid_[ix][iy];
+            if(vCell.empty())
+                continue;
+
+            for(size_t j=0, jend=vCell.size(); j<jend; j++)
+            {
+                const cv::KeyPoint &kpUn = this->keypoints_[vCell[j]];
+                if(bCheckLevels)
+                {
+                    if(kpUn.octave<min_pyramid_level)
+                        continue;
+                    if(max_pyramid_level>=0)
+                        if(kpUn.octave>max_pyramid_level)
+                            continue;
+                }
+
+                const float distx = kpUn.pt.x-x;
+                const float disty = kpUn.pt.y-y;
+
+                if(std::abs(distx)<radium && std::abs(disty)<radium)
+                    candidate_to_match_keypoints.push_back(vCell[j]);
+            }
+        }
+    }
+
+    return candidate_to_match_keypoints;
   }
 }
