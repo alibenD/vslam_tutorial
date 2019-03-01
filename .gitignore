@@ -21,6 +21,8 @@ log
 *.o
 *.a
 .idea
+cmake-build-debug
+cmake-build-release
 
 
 #DON NOT IGNORE LIST
