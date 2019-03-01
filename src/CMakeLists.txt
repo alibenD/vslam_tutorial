@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-02-17 18:31:55
+# @last_modified_date: 2019-02-18 18:22:04
 # @description: TODO
 #---****************************************************************---
 
@@ -17,6 +17,5 @@ FILE(GLOB_RECURSE SOURCES *.cc *.cpp *.c *.cxx)
 
 ADD_LIBRARY(visual_slam_tutorial SHARED ${TYPES_HEADERS} ${SOURCES})
 TARGET_LINK_LIBRARIES(visual_slam_tutorial
-  orb_lib
   ${THIRD_PARTY_LIBS}
   )
