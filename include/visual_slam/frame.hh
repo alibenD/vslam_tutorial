@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-01-21 16:11:21
-  * @last_modified_date: 2019-02-19 21:31:28
+  * @last_modified_date: 2019-03-02 22:26:15
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -46,6 +46,7 @@ namespace ak
       using ID_t = unsigned long;
       friend class FramePair;
       friend class ORBmatcher;
+      friend class VisualOdometry;
       FRIEND_TEST(FrameTest, getGridPosition);
       FRIEND_TEST(FrameTest, ComputeH21);
       FRIEND_TEST(FrameTest, NormalizeKeyPoints);
@@ -98,14 +99,6 @@ namespace ak
     public:
       static Frame::Ptr CreateFrame(const cv::Mat& image,
                                     cv::Mat& image_with_keypoints = EMPTY_MAT);
-      static int ShowMatches(const cv::Mat& last_image,
-                             const cv::Mat& current_image,
-                             const std::string& window_name="Image");
-      static int ShowMatches(const Frame::Ptr& last_frame,
-                             const Frame::Ptr& current_frame,
-                             const std::string& window_name="Image");
-      static int ShowMatches(const cv::Mat& current_image,
-                             const std::string& window_name="Image");
       std::vector<size_t> getCandidateKeypoints(const float& x,
                                                 const float& y,
                                                 const float& radium,
@@ -216,6 +209,8 @@ namespace ak
       Frame::Ptr ptr_reference_frame_;
       std::vector<size_t> keypoints_grid_[IMAGE_COLS][IMAGE_ROWS];
       GridProperty grid_property_;
+      // Pose opencv
+      cv::Mat transform_camera_at_world_;
       // Pose SE3
   };
 }
