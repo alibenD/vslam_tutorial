@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-03-12 09:49:20
+# @last_modified_date: 2019-03-12 10:00:30
 # @description: TODO
 #---****************************************************************---
 
@@ -16,7 +16,7 @@ FOREACH(EXAMPLE ${EXAMPLES})
     ADD_EXECUTABLE(${MY_TARGET} ${EXAMPLE})
     TARGET_LINK_LIBRARIES(${MY_TARGET}
       ${THIRD_PARTY_LIBS}
-      visual_slam_tutorial})
+      visual_slam_tutorial)
   ELSEIF(${CMAKE_BUILD_TYPE} STREQUAL "DEBUG")
     ADD_EXECUTABLE(${MY_TARGET}${CMAKE_DEBUG_POSTFIX} ${EXAMPLE})
     TARGET_LINK_LIBRARIES(${MY_TARGET}${CMAKE_DEBUG_POSTFIX}
