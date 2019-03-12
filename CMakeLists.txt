@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-02-26 10:01:04
+# @last_modified_date: 2019-03-12 09:43:14
 # @description: TODO
 #---****************************************************************---
 
@@ -22,6 +22,8 @@ project(visual_slam)
   ENDIF()
   IF(CMAKE_BUILD_TYPE STREQUAL "RELEASE")
     ADD_DEFINITIONS(-DNDEBUG)
+  ELSEIF(CMAKE_BUILD_TYPE STREQUAL "DEBUG")
+    SET(CMAKE_DEBUG_POSTFIX _debug)
   ENDIF()
   MESSAGE( STATUS "Build Type: " ${CMAKE_BUILD_TYPE})
   OPTION(BUILD_GTESTS "Build test example cases with google test" ON)
