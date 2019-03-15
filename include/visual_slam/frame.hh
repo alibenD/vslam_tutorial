@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-01-21 16:11:21
-  * @last_modified_date: 2019-03-02 22:26:15
+  * @last_modified_date: 2019-03-03 14:51:29
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -20,6 +20,7 @@
 #include <opencv2/opencv.hpp>
 #include <opencv2/features2d/features2d.hpp>
 #include <visual_slam/ORBextractor.hh>
+#include <visual_slam/landmark.hh>
 #include "gtest/gtest_prod.h"
 
 
@@ -47,10 +48,10 @@ namespace ak
       friend class FramePair;
       friend class ORBmatcher;
       friend class VisualOdometry;
-      FRIEND_TEST(FrameTest, getGridPosition);
-      FRIEND_TEST(FrameTest, ComputeH21);
-      FRIEND_TEST(FrameTest, NormalizeKeyPoints);
-//      friend class FrameTest_getGridPosition_Test;
+      friend class Map;
+      //FRIEND_TEST(FrameTest, getGridPosition);
+      //FRIEND_TEST(FrameTest, ComputeH21);
+      //FRIEND_TEST(FrameTest, NormalizeKeyPoints);
       Frame() = default;
       Frame(ID_t id);
       ~Frame() = default;
@@ -82,10 +83,10 @@ namespace ak
 
     public:
       //friend class ::ORBmatcher;
-      //ID_t id_()
-      //{
-      //  return id_;
-      //};
+      inline ID_t getID()
+      {
+        return id_;
+      }
       inline const std::vector<cv::KeyPoint>& getKeyPoints()
       {
         return keypoints_;
@@ -94,6 +95,14 @@ namespace ak
       {
         return descriptors_;
       };
+      inline const cv::Mat& getPose()
+      {
+        return transform_camera_at_world_;
+      }
+      inline const cv::Mat& getOrigin()
+      {
+        return camera_origin_at_world_;
+      }
       cv::Mat image_;
 
     public:
@@ -105,36 +114,18 @@ namespace ak
                                                 const int& min_pyramid_level,
                                                 const int& max_pyramid_level);
       static int factory_id;
-      static Frame::Ptr ptr_initialized_frame;
-      static Frame::Ptr ptr_last_frame;
-      static Frame::Ptr ptr_current_frame;
-      static Frame::Ptr ptr_last_keyframe;
-      static std::vector<Frame::Ptr> frames_vector;
-      static std::vector<Frame::Ptr> keyframes_vector;
-      static std::unordered_map<ID_t, Frame::Ptr> hash_frames;
-      static std::unordered_map<ID_t, Frame::Ptr> hash_keyframes;
-      static std::vector<std::vector<cv::DMatch>> MATCHED_POINTS_SET;
-      //static std::vector<cv::Point3f> init_landmarks;
       static std::vector<std::pair<size_t, cv::Point3f>> init_landmarks;
-      static float sigma;
-      static cv::Mat K; // Temp. definition, there must have a good way to do it
-      static float match_ratio_;
-      static VO_STATE vo_state;
-      static bool enable_show;
+      // keypoints_index, ptr_landmark
+      std::unordered_map<size_t, Landmark::Ptr> landmarks_;
+      // landmark_index, keypoint_index
+      std::unordered_map<ID_t, size_t> landmarks_index_query_;
 
     public:
       //static cv::Ptr<cv::ORB> ptr_orb_;
       static ORBextractor::Ptr ptr_orb_extractor_advanced;
       static ORBextractor::Ptr ptr_orb_extractor_init_advanced;
-      //static std::shared_ptr<ORBmatcher> ptr_orb_matcher_init_advanced;
-      ORBmatcher* ptr_orb_matcher_init_advanced;
-      static cv::Ptr<cv::DescriptorMatcher> matcher;
 
     protected:
-      static bool InitializeVO(const Frame::Ptr& ptr_initialized_frame,
-                               const Frame::Ptr& ptr_current_frame,
-                               cv::Mat& Rcw,
-                               cv::Mat& tcw);
       size_t extractKeyPoints(const cv::Mat& image,
                               cv::Mat& image_with_keypoints);
       int computeDescriptors(const cv::Mat& image);
@@ -144,61 +135,14 @@ namespace ak
       bool getGridPosition(const cv::KeyPoint& kp,
                            size_t& pos_x,
                            size_t& pos_y);
-      static size_t MatchDescriptor(const cv::Mat& last_descriptors,
-                                    const cv::Mat& current_descriptors);
-      static size_t MatchDescriptor(const Frame::Ptr& ptr_last_keyframe,
-                                    const Frame::Ptr& ptr_current_frame);
-      static float FindHomography(std::vector<cv::DMatch>& matched_inliers, cv::Mat& H21);
-      static float FindFundamental(std::vector<cv::DMatch>& matched_inliers, cv::Mat& F21);
-      static cv::Mat ComputeH21(const std::vector<cv::KeyPoint>& keypoints_init,
-                                const std::vector<cv::KeyPoint>& keypoints_cur);
-      static cv::Mat ComputeF21(const std::vector<cv::KeyPoint>& keypoints_init,
-                                const std::vector<cv::KeyPoint>& keypoints_cur);
-      static float CheckHomography(const cv::Mat& H21,
-                                    const cv::Mat& H12,
-                                    std::vector<cv::DMatch>& matched_inliers,
-                                    float sigma);
-      static float CheckFundamental(const cv::Mat& F21,
-                                     std::vector<cv::DMatch>& matched_inliers,
-                                     float sigma);
-      static bool ReconstructFromHomo(std::vector<cv::DMatch>& matched_inliers,
-                                      cv::Mat& H21,
-                                      cv::Mat& K,
-                                      cv::Mat& R21,
-                                      cv::Mat& t21,
-                                      std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
-                                      float min_parallax,
-                                      int min_triangulated);
-      static bool ReconstructFromFund(std::vector<cv::DMatch>& matched_inliers,
-                                      cv::Mat& F21,
-                                      cv::Mat& K,
-                                      cv::Mat& R21,
-                                      cv::Mat& t21,
-                                      std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
-                                      float min_parallax,
-                                      int min_triangulated);
-      static void NormalizeKeyPoints(const std::vector<cv::KeyPoint>& kps,
-                                     std::vector<cv::KeyPoint>& kps_normalized,
-                                     cv::Mat& Transform);
-      static int CheckRT(const cv::Mat& R,
-                         const cv::Mat& t,
-                         const std::vector<cv::KeyPoint>& keypoints_last,
-                         const std::vector<cv::KeyPoint>& keypoints_cur,
-                         const std::vector<cv::DMatch>& matched_inliers,
-                         const cv::Mat& K,
-                         std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
-                         float th2,
-                         float& parallax
-                         );
-      static void Triangulate(const cv::KeyPoint& kp_init,
-                              const cv::KeyPoint& kp_cur,
-                              const cv::Mat& Pose_init,
-                              const cv::Mat& Pose_cur,
-                              cv::Mat& x3D);
-      static void DecomposeE(const cv::Mat& E,
-                             cv::Mat& R1,
-                             cv::Mat& R2,
-                             cv::Mat& t);
+      void insertLandmark(Landmark::Ptr& ptr_landmark, size_t kp_index);
+      inline const std::unordered_map<size_t, Landmark::Ptr>& getLandmark()
+      {
+        return landmarks_;
+      }
+      void updateCovision();
+      void addCovision(const Frame::Ptr& ptr_covision, unsigned int weight);
+      float computeMedianDepth(int section);
 
     private:
       ID_t id_;
@@ -206,11 +150,17 @@ namespace ak
       std::vector<cv::KeyPoint> keypoints_;
       std::vector<cv::DMatch> best_matches_;
       std::vector<cv::DMatch> best_matches_inliers_;
-      Frame::Ptr ptr_reference_frame_;
+      std::unordered_map<Frame::Ptr, unsigned int> covision_sets_;
+      std::vector<Frame::Ptr> covision_frame_ordered_;
+      std::vector<unsigned int> covision_weight_ordered_;
       std::vector<size_t> keypoints_grid_[IMAGE_COLS][IMAGE_ROWS];
       GridProperty grid_property_;
       // Pose opencv
-      cv::Mat transform_camera_at_world_;
+      cv::Mat transform_camera_at_world_;  // TF21
+      cv::Mat camera_origin_at_world_;
+      bool init_covision_{false};
+      //cv::Mat translation_;
+      //cv::Mat rotation_;
       // Pose SE3
   };
 }

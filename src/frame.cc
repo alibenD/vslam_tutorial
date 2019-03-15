@@ -17,6 +17,7 @@
 #include <future>
 #include <visual_slam/utils/io.hh>
 #include <visual_slam/utils/time.hh>
+#include <assert.h>
 
 //CODE
 namespace ak
@@ -31,30 +32,12 @@ namespace ak
   ORBextractor::Ptr Frame::ptr_orb_extractor_init_advanced = std::make_shared<ORBextractor>(2*NUM_FEATURES,LEVEL_SCALE_FACTOR,NUM_LEVELS,INIT_FAST,MIN_FAST);
   ORBextractor::Ptr Frame::ptr_orb_extractor_advanced = std::make_shared<ORBextractor>(NUM_FEATURES,LEVEL_SCALE_FACTOR,NUM_LEVELS,INIT_FAST,MIN_FAST);
   //ORBmatcher::Ptr Frame::ptr_orb_matcher_init_advanced = std::make_shared<ORBextractor>(0.9, true);
-  cv::Ptr<cv::DescriptorMatcher> Frame::matcher  = cv::DescriptorMatcher::create("BruteForce-Hamming");
   int Frame::factory_id = 0;
-  Frame::Ptr Frame::ptr_initialized_frame = nullptr;
-  Frame::Ptr Frame::ptr_current_frame = nullptr;
-  Frame::Ptr Frame::ptr_last_frame = nullptr;
-  Frame::Ptr Frame::ptr_last_keyframe = nullptr;
-  std::vector<Frame::Ptr> Frame::frames_vector;
-  std::vector<Frame::Ptr> Frame::keyframes_vector;
-  std::unordered_map<Frame::ID_t, Frame::Ptr> Frame::hash_frames;
-  std::unordered_map<Frame::ID_t, Frame::Ptr> Frame::hash_keyframes;
-  std::vector<std::vector<cv::DMatch>> Frame::MATCHED_POINTS_SET;
   std::vector<std::pair<size_t, cv::Point3f>> Frame::init_landmarks;
-
-  float Frame::match_ratio_ = 2.0;
-  float Frame::sigma = 1.0;
-  VO_STATE Frame::vo_state = NO_IMAGE;
-  bool Frame::enable_show = false;
-  const size_t MAX_ITERATION = 200;
-  cv::Mat Frame::K;
 
   Frame::Frame(ID_t id)
     : id_(id)
   {
-    this->ptr_orb_matcher_init_advanced = new ORBmatcher(0.9, true);
   }
 
   Frame::Ptr Frame::CreateFrame(const cv::Mat& image,
@@ -73,20 +56,16 @@ namespace ak
   size_t Frame::extractKeyPoints(const cv::Mat& image,
                                  cv::Mat& img_with_keypoints)
   {
-    if(Frame::vo_state == NO_IMAGE || Frame::vo_state == NO_INITIALIZATION)
-    {
+    // TODO: (aliben.develop@gmail.com)
+    // To unify orb extractor call
       (*Frame::ptr_orb_extractor_init_advanced)(image,
                                                 cv::Mat(),
                                                 this->keypoints_,
                                                 this->descriptors_);
-    }
-    else
-    {
-      (*Frame::ptr_orb_extractor_advanced)(image,
-                                           cv::Mat(),
-                                           this->keypoints_,
-                                           this->descriptors_);
-    }
+      //(*Frame::ptr_orb_extractor_advanced)(image,
+      //                                     cv::Mat(),
+      //                                     this->keypoints_,
+      //                                     this->descriptors_);
     this->assignFeaturePointToGrid();
     return this->keypoints_.size();
   }
@@ -191,7 +170,126 @@ namespace ak
             }
         }
     }
-
     return candidate_to_match_keypoints;
+  }
+
+  void Frame::insertLandmark(Landmark::Ptr& ptr_landmark, size_t kp_index)
+  {
+      landmarks_.insert(std::pair<size_t, Landmark::Ptr>(kp_index, ptr_landmark));
+      landmarks_index_query_.insert(std::pair<ID_t, size_t>(ptr_landmark->getID(), kp_index));
+      AK_DLOG_INFO << "Landmark ID: " << ptr_landmark->getID() << "\tKP index: " << kp_index;
+  }
+
+  void Frame::updateCovision()
+  {
+    std::unordered_map<Frame::Ptr, unsigned int> covision_counter;
+    for(const auto& landmark_pair:landmarks_)
+    {
+      auto ptr_landmark = landmark_pair.second;
+      // Check this pointer
+      if(ptr_landmark == nullptr)
+      {
+        continue;
+      }
+      // TODO: (aliben.develop@gmail.com)
+      // If landmark has been removed from map
+//      if(landmark)
+      auto observation_this_landmark = ptr_landmark->getObservers();
+      for(const auto& obs_frame_pair:observation_this_landmark)
+      {
+        auto ptr_frame = obs_frame_pair.first;
+        if(id_ == ptr_frame->getID())
+        {
+          continue;
+        }
+        covision_counter[ptr_frame]++;
+      }
+    }
+
+    if(covision_counter.empty() == true)
+    {
+      AK_DLOG_INFO << "Frame: " << id_ << " doesn't find out covision frame.";
+      return;
+    }
+
+    unsigned int max_count_covision = 0;
+    unsigned int threshold_co_landmark = 15;
+    Frame::Ptr ptr_covision_frame = nullptr;
+    std::vector<std::pair<unsigned int, Frame::Ptr>> weight_covision;
+    for(const auto& covision_pair:covision_counter)
+    {
+      auto count_num = covision_pair.second;
+      if(count_num > max_count_covision)
+      {
+        threshold_co_landmark = count_num;
+        ptr_covision_frame = covision_pair.first;
+      }
+      if(count_num > threshold_co_landmark)
+      {
+        weight_covision.push_back(std::make_pair(covision_pair.second, covision_pair.first));
+        ptr_covision_frame->addCovision(this->shared_from_this(), count_num);
+      }
+    }
+
+    if(weight_covision.empty() == true)
+    {
+      assert(ptr_covision_frame != nullptr);
+      weight_covision.push_back(std::make_pair(max_count_covision, ptr_covision_frame));
+      ptr_covision_frame->addCovision(this->shared_from_this(), max_count_covision);
+    }
+
+    // Sort weight - ascent
+    std::sort(weight_covision.begin(), weight_covision.end());
+    std::list<Frame::Ptr> covision_frame_ordered;
+    std::list<unsigned int> covision_weight_ordered;
+    for(const auto& weight_pair:weight_covision)
+    {
+      covision_frame_ordered.push_front(weight_pair.second);
+      covision_weight_ordered.push_front(weight_pair.first);
+    }
+
+    // TODO: (aliben.develop@gmail.com)
+    // Lock for thread safe
+    covision_sets_ = covision_counter;
+    covision_frame_ordered_ = std::vector<Frame::Ptr>(covision_frame_ordered.begin(), covision_frame_ordered.end());
+    covision_weight_ordered_ = std::vector<unsigned int>(covision_weight_ordered.begin(), covision_weight_ordered.end());
+  }
+
+  void Frame::addCovision(const Frame::Ptr& ptr_covision, unsigned int weight)
+  {
+    if(covision_sets_.count(ptr_covision) == 0)
+    {
+      covision_sets_[ptr_covision] = weight;
+    }
+    else if(covision_sets_[ptr_covision]!=weight)
+    {
+      covision_sets_[ptr_covision] = weight;
+    }
+    else
+    {
+      return;
+    }
+
+    // UpdateBestCovisibles();
+  }
+
+  float Frame::computeMedianDepth(int section)
+  {
+    cv::Mat transform = transform_camera_at_world_.clone();
+    std::vector<float> depth_vector;
+    cv::Mat z_rotation = transform.row(2).colRange(0,3).t();
+    auto z_translation = transform.at<float>(2,3);
+    for(const auto& landmark_pair:landmarks_)
+    {
+      auto landmark = landmark_pair.second;
+      if(landmark != nullptr)
+      {
+        auto lm3d = cv::Mat(landmark->getPosition());
+        float z = z_rotation.dot(lm3d) + z_translation;
+        depth_vector.push_back(z);
+      }
+    }
+    std::sort(depth_vector.begin(), depth_vector.end());
+    return depth_vector[(depth_vector.size() - 1)/section];
   }
 }
