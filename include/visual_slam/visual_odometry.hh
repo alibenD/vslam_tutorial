@@ -7,13 +7,14 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-01 15:20:49
-  * @last_modified_date: 2019-03-02 21:59:58
+  * @last_modified_date: 2019-03-12 08:48:29
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
 
 // Header include
 #include <visual_slam/frame.hh>
+#include <visual_slam/landmark.hh>
 
 // Declaration
 namespace ak
@@ -25,7 +26,7 @@ namespace ak
   //  INITIALIZED = 0,
   //  TRACK = 1
   //};
-
+  using ID_t = unsigned long;
   struct INIT_PARAMETER
   {
     size_t max_iterations_ = 200;
@@ -126,25 +127,28 @@ namespace ak
                       cv::Mat& R1,
                       cv::Mat& R2,
                       cv::Mat& t);
+
+      void InitMap();
       //=========== END Initialization Functions==============
 
     public:
-      /*static*/ std::vector<Frame::Ptr> frames_vector;
-      /*static*/ std::vector<Frame::Ptr> keyframes_vector;
-      /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_frames;
-      /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_keyframes;
+      ///*static*/ std::vector<Frame::Ptr> frames_vector;
+      ///*static*/ std::vector<Frame::Ptr> keyframes_vector;
+      ///*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_frames;
+      ///*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_keyframes;
       std::vector<cv::DMatch> best_matches_;
       std::vector<cv::DMatch> best_matches_inliers_;
 
     private:
-      /*static*/ Frame::Ptr ptr_initialized_frame;
-      /*static*/ Frame::Ptr ptr_last_frame;
-      /*static*/ Frame::Ptr ptr_current_frame;
-      /*static*/ Frame::Ptr ptr_last_keyframe;
+      /*static*/ Frame::Ptr ptr_initialized_frame_;
+      /*static*/ Frame::Ptr ptr_last_frame_;
+      /*static*/ Frame::Ptr ptr_current_frame_;
+      /*static*/ Frame::Ptr ptr_last_keyframe_;
       ///*static*/ VO_STATE vo_state;
       /*static*/ std::vector<std::vector<cv::DMatch>> ransec_matched_points_set_;
       std::shared_ptr<ORBmatcher> ptr_orb_matcher_init_advanced;
       VO_PARAMETER vo_params_;
+      std::unordered_map<ID_t, Landmark::Ptr> landmarks_map_;
       ///*static*/ Frame::Ptr ptr_reference_frame_;
   };
 }

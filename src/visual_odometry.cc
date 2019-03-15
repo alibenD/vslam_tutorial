@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-01 15:20:49
-  * @last_modified_date: 2019-03-02 22:38:29
+  * @last_modified_date: 2019-03-12 08:50:43
   * @brief: TODO
   * @details: TODO
   */
@@ -19,17 +19,17 @@
 namespace ak
 {
   //=========== Static member Initialization ============
-  //Frame::Ptr ptr_initialized_frame = nullptr;
-  //Frame::Ptr ptr_last_frame = nullptr;
-  //Frame::Ptr ptr_current_frame = nullptr;
-  //Frame::Ptr ptr_last_keyframe = nullptr;
+  //Frame::Ptr ptr_initialized_frame_ = nullptr;
+  //Frame::Ptr ptr_last_frame_ = nullptr;
+  //Frame::Ptr ptr_current_frame_ = nullptr;
+  //Frame::Ptr ptr_last_keyframe_ = nullptr;
   //=========== END (Static member Initialization) ============
   
   VisualOdometry::VisualOdometry()
-    : ptr_initialized_frame(nullptr),
-      ptr_last_frame(nullptr),
-      ptr_current_frame(nullptr),
-      ptr_last_keyframe(nullptr),
+    : ptr_initialized_frame_(nullptr),
+      ptr_last_frame_(nullptr),
+      ptr_current_frame_(nullptr),
+      ptr_last_keyframe_(nullptr),
       ptr_orb_matcher_init_advanced(nullptr)
   {
     ptr_orb_matcher_init_advanced = std::make_shared<ORBmatcher>(0.9, true);
@@ -69,19 +69,19 @@ namespace ak
       if(num_keypoints >= 100)
       {
         // Add this frame as initialize_frame;
-        this->ptr_initialized_frame = pFrame;
-        //this->ptr_last_frame = this->ptr_current_frame;
-        this->ptr_last_frame = nullptr;
-        this->ptr_current_frame = pFrame;
+        this->ptr_initialized_frame_ = pFrame;
+        //this->ptr_last_frame_ = this->ptr_current_frame_;
+        this->ptr_last_frame_ = nullptr;
+        this->ptr_current_frame_ = pFrame;
         vo_params_.vo_state_ = NO_INITIALIZATION;
         return 0;
       }
       else
       {
         // Drop this frame and waiting for next init frame
-        this->ptr_initialized_frame = nullptr;
-        this->ptr_last_frame = nullptr;
-        this->ptr_current_frame = nullptr;
+        this->ptr_initialized_frame_ = nullptr;
+        this->ptr_last_frame_ = nullptr;
+        this->ptr_current_frame_ = nullptr;
         vo_params_.vo_state_ = NO_IMAGE;
       }
     }
@@ -92,24 +92,24 @@ namespace ak
       // but the biggest diff id num is 2, this could be better.
       if(num_keypoints < 100)
       {
-        this->ptr_initialized_frame = nullptr;
-        this->ptr_last_frame = nullptr;
-        this->ptr_current_frame = nullptr;
+        this->ptr_initialized_frame_ = nullptr;
+        this->ptr_last_frame_ = nullptr;
+        this->ptr_current_frame_ = nullptr;
         vo_params_.vo_state_ = NO_IMAGE;
       }
-      auto num_matches = this->ptr_orb_matcher_init_advanced->SearchForInitialization(ptr_initialized_frame, pFrame, 100);
-      auto all_matches = ptr_initialized_frame->best_matches_;
+      auto num_matches = this->ptr_orb_matcher_init_advanced->SearchForInitialization(ptr_initialized_frame_, pFrame, 100);
+      //auto all_matches = ptr_initialized_frame_->best_matches_;
       AK_DLOG_ERROR << "Matched: " << num_matches;
       if(vo_params_.enable_show_ == true)
       {
-        ShowMatches(ptr_initialized_frame, pFrame);
+        ShowMatches(ptr_initialized_frame_, pFrame);
       }
       if(num_matches < 100)
       {
         AK_DLOG_ERROR << "Matches ≤ 100, Restarting Init.";
-        this->ptr_initialized_frame = nullptr;
-        this->ptr_last_frame = nullptr;
-        this->ptr_current_frame = nullptr;
+        this->ptr_initialized_frame_ = nullptr;
+        this->ptr_last_frame_ = nullptr;
+        this->ptr_current_frame_ = nullptr;
         vo_params_.vo_state_ = NO_IMAGE;
         //vo_params_.vo_state_ = NO_INITIALIZATION;
         //return nullptr;
@@ -117,25 +117,33 @@ namespace ak
       }
       else
       {
-        this->ptr_last_frame = this->ptr_initialized_frame;
-        this->ptr_current_frame = pFrame;
+        this->ptr_last_frame_ = this->ptr_initialized_frame_;
+        this->ptr_current_frame_ = pFrame;
         cv::Mat R21, t21;
-
-        auto isInit = InitializeVO(ptr_initialized_frame,
-                                   ptr_current_frame,
+        auto isInit = InitializeVO(ptr_initialized_frame_,
+                                   ptr_current_frame_,
                                    R21,
                                    t21);
         if(isInit == true)
         {
           // If Initialization successful, then calculate the transformation
           vo_params_.vo_state_ = INITIALIZED;
-          ptr_initialized_frame->transform_camera_at_world_ = cv::Mat::eye(4, 4, CV_32F);
           cv::Mat transform_current_at_initialized = cv::Mat::eye(4, 4, CV_32F);
           R21.copyTo(transform_current_at_initialized.rowRange(0, 3).colRange(0, 3));
           t21.copyTo(transform_current_at_initialized.rowRange(0, 3).col(3));
+          auto camera_origin_at_world = -R21.inv()*t21;
           // Set pose for current frame
-          ptr_current_frame->transform_camera_at_world_ = transform_current_at_initialized;
-          AK_DLOG_INFO << "Tcw:\n" << transform_current_at_initialized;
+          ptr_initialized_frame_->transform_camera_at_world_ = cv::Mat::eye(4, 4, CV_32F);
+          ptr_initialized_frame_->camera_origin_at_world_ = cv::Mat::zeros(3, 1, CV_32F);
+//          ptr_initialized_frame_->translation_ = ptr_initialized_frame_->transform_camera_at_world_.rowRange(0,3).col(3);
+//          ptr_initialized_frame_->rotation_ = ptr_initialized_frame_->transform_camera_at_world_.rowRange(0,3).colRange(0,3);
+
+          ptr_current_frame_->transform_camera_at_world_ = transform_current_at_initialized;
+          ptr_current_frame_->camera_origin_at_world_ = camera_origin_at_world;
+          AK_LOG_INFO << "Tcw:\n" << transform_current_at_initialized;
+          AK_DLOG_INFO << "Init_landmarks: " << Frame::init_landmarks.size();
+
+          InitMap();
           exit(0);
         }
         else
@@ -149,10 +157,10 @@ namespace ak
       // Initialization Done!
       // Go on track
       AK_LOG_INFO << "Initialization Done!!";
-      this->keyframes_vector.push_back(pFrame);
-      this->hash_keyframes.insert(std::make_pair(pFrame->factory_id, pFrame));
-      this->frames_vector.push_back(pFrame);
-      this->hash_frames.insert(std::make_pair(pFrame->factory_id, pFrame));
+//      this->keyframes_vector.push_back(pFrame);
+//      this->hash_keyframes.insert(std::make_pair(pFrame->factory_id, pFrame));
+//      this->frames_vector.push_back(pFrame);
+//      this->hash_frames.insert(std::make_pair(pFrame->factory_id, pFrame));
     }
     //AK_LOG_INFO << "Size of frames: " << Frame::frames_vector.size();
     //AK_LOG_INFO << "Size of hash_frames: " << Frame::hash_frames.size();
@@ -213,6 +221,7 @@ namespace ak
     if(ratio_homography > 0.40)
     {
       AK_DLOG_WARNING << "Reconstruct From Homography.";
+      //ptr_initialized_frame_->best_matches_inliers_ = inliers_H;
       return ReconstructFromHomo(inliers_H,
                                  matrix_H21,
                                  vo_params_.K_,
@@ -225,6 +234,7 @@ namespace ak
     else
     {
       AK_DLOG_WARNING << "Reconstruct From Fundamental.";
+      //ptr_initialized_frame_->best_matches_inliers_ = inliers_F;
       return ReconstructFromFund(inliers_F,
                                  matrix_F21,
                                  vo_params_.K_,
@@ -246,11 +256,11 @@ namespace ak
     cv::Mat transform_init, transform_cur;
     // TODO: (aliben.develop@gmail.com)
     // NormalizeKeyPoints should be optimized, cause in all iteration keypoints is the same set. It don't have to calculate each time to find homo/fund matrix.
-    NormalizeKeyPoints(ptr_initialized_frame->getKeyPoints(),
+    NormalizeKeyPoints(ptr_initialized_frame_->getKeyPoints(),
                        normalized_kps_init,
                        transform_init);
     //AK_DLOG_INFO << "Mat1_homo: \n" << transform_init;
-    NormalizeKeyPoints(ptr_current_frame->getKeyPoints(),
+    NormalizeKeyPoints(ptr_current_frame_->getKeyPoints(),
                        normalized_kps_cur,
                        transform_cur);
     //AK_DLOG_INFO << "Mat2_homo: \n" << transform_cur;
@@ -293,10 +303,10 @@ namespace ak
     cv::Mat transform_init, transform_cur;
     // TODO: (aliben.develop@gmail.com)
     // NormalizeKeyPoints should be optimized, cause in all iteration keypoints is the same set. It don't have to calculate each time to find homo/fund matrix.
-    NormalizeKeyPoints(ptr_initialized_frame->getKeyPoints(),
+    NormalizeKeyPoints(ptr_initialized_frame_->getKeyPoints(),
                        normalized_kps_init,
                        transform_init);
-    NormalizeKeyPoints(ptr_current_frame->getKeyPoints(),
+    NormalizeKeyPoints(ptr_current_frame_->getKeyPoints(),
                        normalized_kps_cur,
                        transform_cur);
     cv::Mat transform_cur_transpose = transform_cur.t();
@@ -447,7 +457,7 @@ namespace ak
                                         float sigma)
   {
     matched_inliers.clear();
-    const size_t N = ptr_initialized_frame->best_matches_.size();
+    const size_t N = ptr_initialized_frame_->best_matches_.size();
 
     const float h11 = H21.at<float>(0,0);
     const float h12 = H21.at<float>(0,1);
@@ -475,10 +485,10 @@ namespace ak
     for(size_t i=0; i<N; ++i)
     {
       bool isInliers = true;
-      auto index_kp_init = ptr_initialized_frame->best_matches_[i].queryIdx;
-      auto index_kp_cur  = ptr_initialized_frame->best_matches_[i].trainIdx;
-      const auto& kp_init = ptr_initialized_frame->keypoints_[index_kp_init];
-      const auto& kp_cur = ptr_current_frame->keypoints_[index_kp_cur];
+      auto index_kp_init = ptr_initialized_frame_->best_matches_[i].queryIdx;
+      auto index_kp_cur  = ptr_initialized_frame_->best_matches_[i].trainIdx;
+      const auto& kp_init = ptr_initialized_frame_->keypoints_[index_kp_init];
+      const auto& kp_cur = ptr_current_frame_->keypoints_[index_kp_cur];
 
       const float u1 = kp_init.pt.x;
       const float v1 = kp_init.pt.y;
@@ -520,7 +530,7 @@ namespace ak
       if(isInliers)
       {
         //AK_DLOG_ERROR << "One inliers captured.";
-        matched_inliers.push_back(ptr_initialized_frame->best_matches_[i]);
+        matched_inliers.push_back(ptr_initialized_frame_->best_matches_[i]);
       }
     }
     //AK_DLOG_ERROR << "H-inliers.size = " << matched_inliers.size();
@@ -532,7 +542,7 @@ namespace ak
                                          float sigma)
   {
     matched_inliers.clear();
-    const int N = ptr_initialized_frame->best_matches_.size();
+    const int N = ptr_initialized_frame_->best_matches_.size();
     const float f11 = F21.at<float>(0,0);
     const float f12 = F21.at<float>(0,1);
     const float f13 = F21.at<float>(0,2);
@@ -553,10 +563,10 @@ namespace ak
     {
       bool isInliers = true;
 
-      auto index_kp_init = ptr_initialized_frame->best_matches_[i].queryIdx;
-      auto index_kp_cur  = ptr_initialized_frame->best_matches_[i].trainIdx;
-      const auto& kp_init = ptr_initialized_frame->keypoints_[index_kp_init];
-      const auto& kp_cur = ptr_current_frame->keypoints_[index_kp_cur];
+      auto index_kp_init = ptr_initialized_frame_->best_matches_[i].queryIdx;
+      auto index_kp_cur  = ptr_initialized_frame_->best_matches_[i].trainIdx;
+      const auto& kp_init = ptr_initialized_frame_->keypoints_[index_kp_init];
+      const auto& kp_cur = ptr_current_frame_->keypoints_[index_kp_cur];
 
       const float u1 = kp_init.pt.x;
       const float v1 = kp_init.pt.y;
@@ -605,7 +615,7 @@ namespace ak
       if(isInliers)
       {
         //AK_DLOG_ERROR << "One inliers captured.";
-        matched_inliers.push_back(ptr_initialized_frame->best_matches_[i]);
+        matched_inliers.push_back(ptr_initialized_frame_->best_matches_[i]);
         //AK_DLOG_WARNING << matched_inliers.size();
       }
     }
@@ -732,7 +742,7 @@ namespace ak
     float bestParallax = -1;
 
     std::vector<std::pair<size_t, cv::Point3f>> bestP3D;
-    std::vector<std::pair<size_t, cv::Point3f>> bestTriangulated;
+//    std::vector<std::pair<size_t, cv::Point3f>> bestTriangulated;
 
     // Instead of applying the visibility constraints proposed in the Faugeras' paper (which could fail for points seen with low parallax)
     // We reconstruct all hypotheses and check in terms of triangulated points and parallax
@@ -742,8 +752,8 @@ namespace ak
       std::vector<std::pair<size_t, cv::Point3f>> vP3Di;
       int nGood = CheckRT(vector_R[i],
                           vector_t[i],
-                          ptr_initialized_frame->getKeyPoints(),
-                          ptr_current_frame->getKeyPoints(),
+                          ptr_initialized_frame_->getKeyPoints(),
+                          ptr_current_frame_->getKeyPoints(),
                           matched_inliers,
                           K,
                           vP3Di,
@@ -765,6 +775,7 @@ namespace ak
     }
 
     auto N = matched_inliers.size();
+    ptr_last_frame_->best_matches_inliers_ = matched_inliers;
 
     if(secondBestGood<0.75*bestGood && bestParallax>=min_parallax && bestGood>min_triangulated && bestGood>0.9*N)
     {
@@ -796,14 +807,14 @@ namespace ak
     cv::Mat t2=-t;
 
     // Reconstruct with the 4 hyphoteses and check
-    std::vector<std::pair<size_t, cv::Point3f>> bestP3D;
+//    std::vector<std::pair<size_t, cv::Point3f>> bestP3D;
     std::vector<std::pair<size_t, cv::Point3f>> vP3D1, vP3D2, vP3D3, vP3D4;
-    std::vector<std::pair<size_t, cv::Point3f>> bestTriangulated1,bestTriangulated2,bestTriangulated3, bestTriangulated4;
+//    std::vector<std::pair<size_t, cv::Point3f>> bestTriangulated1,bestTriangulated2,bestTriangulated3, bestTriangulated4;
     float parallax1,parallax2, parallax3, parallax4;
     int nGood1 = CheckRT(R1,
                          t1,
-                         ptr_initialized_frame->getKeyPoints(),
-                         ptr_current_frame->getKeyPoints(),
+                         ptr_initialized_frame_->getKeyPoints(),
+                         ptr_current_frame_->getKeyPoints(),
                          matched_inliers,
                          K,
                          vP3D1,
@@ -811,8 +822,8 @@ namespace ak
                          parallax1);
     int nGood2 = CheckRT(R2,
                          t1,
-                         ptr_initialized_frame->getKeyPoints(),
-                         ptr_current_frame->getKeyPoints(),
+                         ptr_initialized_frame_->getKeyPoints(),
+                         ptr_current_frame_->getKeyPoints(),
                          matched_inliers,
                          K,
                          vP3D2,
@@ -820,8 +831,8 @@ namespace ak
                          parallax2);
     int nGood3 = CheckRT(R1,
                          t2,
-                         ptr_initialized_frame->getKeyPoints(),
-                         ptr_current_frame->getKeyPoints(),
+                         ptr_initialized_frame_->getKeyPoints(),
+                         ptr_current_frame_->getKeyPoints(),
                          matched_inliers,
                          K,
                          vP3D3,
@@ -829,8 +840,8 @@ namespace ak
                          parallax3);
     int nGood4 = CheckRT(R2,
                          t2,
-                         ptr_initialized_frame->getKeyPoints(),
-                         ptr_current_frame->getKeyPoints(),
+                         ptr_initialized_frame_->getKeyPoints(),
+                         ptr_current_frame_->getKeyPoints(),
                          matched_inliers,
                          K,
                          vP3D4,
@@ -843,6 +854,7 @@ namespace ak
     t21 = cv::Mat();
 
     auto N = matched_inliers.size();
+    ptr_last_frame_->best_matches_inliers_ = matched_inliers;
     int nMinGood = std::max(static_cast<int>(0.9*N),min_triangulated);
 
     int nsimilar = 0;
@@ -867,8 +879,8 @@ namespace ak
     {
       if(parallax1>min_parallax)
       {
-        bestP3D = vP3D1;
-        init_landmarks = bestTriangulated1;
+        init_landmarks = vP3D1;
+//        init_landmarks = bestTriangulated1;
         //vbTriangulated = vbTriangulated1;
         R1.copyTo(R21);
         t1.copyTo(t21);
@@ -879,9 +891,9 @@ namespace ak
     {
       if(parallax2>min_parallax)
       {
-        bestP3D = vP3D2;
+        init_landmarks = vP3D2;
         //vbTriangulated = vbTriangulated2;
-        init_landmarks = bestTriangulated2;
+//        init_landmarks = bestTriangulated2;
         R2.copyTo(R21);
         t1.copyTo(t21);
         return true;
@@ -891,9 +903,9 @@ namespace ak
     {
       if(parallax3>min_parallax)
       {
-        bestP3D = vP3D3;
+        init_landmarks = vP3D3;
         //vbTriangulated = vbTriangulated3;
-        init_landmarks = bestTriangulated3;
+//        init_landmarks = bestTriangulated3;
         R1.copyTo(R21);
         t2.copyTo(t21);
         return true;
@@ -903,9 +915,9 @@ namespace ak
     {
       if(parallax4>min_parallax)
       {
-        bestP3D = vP3D4;
+        init_landmarks = vP3D4;
         //vbTriangulated = vbTriangulated4;
-        init_landmarks = bestTriangulated4;
+//        init_landmarks = bestTriangulated4;
         R2.copyTo(R21);
         t2.copyTo(t21);
         return true;
@@ -1017,8 +1029,9 @@ namespace ak
       vCosParallax.push_back(cosParallax);
       //vP3D[vMatches12[i].first] = cv::Point3f(p3dC1.at<float>(0),p3dC1.at<float>(1),p3dC1.at<float>(2));
       auto landmark = cv::Point3f(p3dC1.at<float>(0),p3dC1.at<float>(1),p3dC1.at<float>(2));
-      init_landmarks.push_back(std::make_pair(matched_inliers[i].queryIdx, landmark));
-      
+      //init_landmarks.push_back(std::make_pair(matched_inliers[i].queryIdx, landmark));
+      init_landmarks.push_back(std::make_pair(i, landmark));
+
       nGood++;
 
       if(cosParallax<0.99998)
@@ -1084,5 +1097,57 @@ namespace ak
     R2 = u*W.t()*vt;
     if(cv::determinant(R2)<0)
       R2=-R2;
+  }
+
+  void VisualOdometry::InitMap()
+  {
+    auto init_landmarks_size = Frame::init_landmarks.size();
+    AK_DLOG_WARNING << "Init landmark: " << init_landmarks_size;
+    for(size_t i=0; i<init_landmarks_size; ++i)
+    {
+      //cv::Mat position_at_world(Frame::init_landmarks[i].second);
+      auto position_at_world = Frame::init_landmarks[i].second;
+      auto idx_matched = Frame::init_landmarks[i].first;
+      auto ptr_landmark = Landmark::CreateLandmark(ptr_initialized_frame_, ptr_current_frame_, position_at_world);
+//      AK_DLOG_ERROR << "Num: " << ptr_initialized_frame_->best_matches_inliers_[idx_matched].queryIdx;
+      //AK_DLOG_INFO << "Init Frame:";
+      auto queryIdx = ptr_initialized_frame_->best_matches_inliers_[idx_matched].queryIdx;
+      auto trainIdx = ptr_initialized_frame_->best_matches_inliers_[idx_matched].trainIdx;
+      ptr_initialized_frame_->insertLandmark(ptr_landmark, queryIdx);
+      //AK_DLOG_INFO << "Current Frame:";
+      ptr_current_frame_->insertLandmark(ptr_landmark, trainIdx);
+
+      // Add Observation
+      ptr_landmark->addObserver(ptr_initialized_frame_, queryIdx);
+      ptr_landmark->addObserver(ptr_current_frame_, trainIdx);
+
+      ptr_landmark->updateLandmark();
+    }
+
+    // Add co-vision
+    ptr_initialized_frame_->updateCovision();
+    ptr_current_frame_->updateCovision();
+
+    // Optimizer setup
+    // Initial a scale for slam, !!! Attension, it is not real distance in the world, they differ with a scale factor, so if we need a real distance for map, there must have another source to confirm the scale factor
+    auto median_depth = ptr_initialized_frame_->computeMedianDepth(2);
+    auto inv_median_depth = 1.0f/median_depth;
+
+//    if(median_depth < 0 || )
+    cv::Mat transform = ptr_current_frame_->getPose();
+    transform.col(3).rowRange(0,3) = transform.col(3).rowRange(0,3)*inv_median_depth;
+//    ptr_current_frame->setPose()
+    ptr_current_frame_->transform_camera_at_world_ = transform;
+
+    // Scale All point
+    auto landmarks = ptr_initialized_frame_->getLandmark();
+    for(const auto& landmark_pair:landmarks)
+    {
+      auto ptr_landmark = landmark_pair.second;
+      if(ptr_landmark != nullptr)
+      {
+        ptr_landmark->setPosition(ptr_landmark->getPosition()*inv_median_depth);
+      }
+    }
   }
 }
