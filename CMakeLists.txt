@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-03-12 09:43:14
+# @last_modified_date: 2019-03-21 15:38:41
 # @description: TODO
 #---****************************************************************---
 
@@ -26,6 +26,7 @@ project(visual_slam)
     SET(CMAKE_DEBUG_POSTFIX _debug)
   ENDIF()
   MESSAGE( STATUS "Build Type: " ${CMAKE_BUILD_TYPE})
+  MESSAGE( STATUS "DEBUG POSTFIX: " ${CMAKE_DEBUG_POSTFIX})
   OPTION(BUILD_GTESTS "Build test example cases with google test" ON)
   OPTION(WITH_GLOG "Enable google log in this case" ON)
 
@@ -85,6 +86,7 @@ project(visual_slam)
   find_package(GLM REQUIRED)
   find_package(GLFW3 REQUIRED)
   find_package(ASSIMP REQUIRED)
+  find_package( DBoW3 REQUIRED )
   #find_package(QT5 REQUIRED)
   find_package(G2O REQUIRED)
   find_package(Glog REQUIRED)
@@ -106,6 +108,8 @@ project(visual_slam)
   #INCLUDE_DIRECTORIES(${G2O_INCLUDE_DIR})
   INCLUDE_DIRECTORIES(${GLOG_INCLUDE_DIRS})
   INCLUDE_DIRECTORIES(/System/Library/Frameworks)
+  include_directories( ${DBoW3_INCLUDE_DIRS} )
+
 
 # Set&Add LIB PATH/LINKING_DIRECTORIES
   # Example: LINK_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/lib)
@@ -128,6 +132,7 @@ project(visual_slam)
     ${G2O_CORE_LIBRARY}
     ${G2O_CLI_LIBRARY}
     ${GLOG_LIBRARIES}
+    ${DBoW3_LIBS}
   )
 
 #MESSAGE("*****" ${Pangolin_LIBS})
