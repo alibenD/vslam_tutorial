@@ -67,6 +67,10 @@ namespace ak
       {
         position_at_world_ = position;
       }
+      inline bool isGood()
+      {
+        return is_good_;
+      }
       static ID_t factory_id;
 
     protected:
@@ -83,6 +87,7 @@ namespace ak
       cv::Point3f position_normal_at_camera_;
       Property property_;
       Count_t num_observation_times_;
+      bool is_good_{true};
       std::pair<std::shared_ptr<Frame>, std::shared_ptr<Frame>> first_frame_pair_;
       std::unordered_map<std::shared_ptr<Frame>, size_t> observers_;    /*! Observation FrameID and correspond keypointID*/
       std::vector<cv::Mat> descriptors_all_observed_; /*! Description for all observations */

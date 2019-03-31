@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-01 15:20:49
-  * @last_modified_date: 2019-03-12 08:48:29
+  * @last_modified_date: 2019-03-31 18:37:26
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -58,6 +58,7 @@ namespace ak
     public:
       using Ptr = std::shared_ptr<VisualOdometry>;
       VisualOdometry();
+      VisualOdometry(const std::string& vocab_path);
       ~VisualOdometry() = default;
 
     public:
@@ -131,11 +132,13 @@ namespace ak
       void InitMap();
       //=========== END Initialization Functions==============
 
+      bool trackWithLastKeyFrame();
+
     public:
-      ///*static*/ std::vector<Frame::Ptr> frames_vector;
-      ///*static*/ std::vector<Frame::Ptr> keyframes_vector;
-      ///*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_frames;
-      ///*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_keyframes;
+      /*static*/ std::vector<Frame::Ptr> frames_vector_;
+      /*static*/ std::vector<Frame::Ptr> keyframes_vector_;
+      /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_frames_;
+      /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_keyframes_;
       std::vector<cv::DMatch> best_matches_;
       std::vector<cv::DMatch> best_matches_inliers_;
 
@@ -149,6 +152,7 @@ namespace ak
       std::shared_ptr<ORBmatcher> ptr_orb_matcher_init_advanced;
       VO_PARAMETER vo_params_;
       std::unordered_map<ID_t, Landmark::Ptr> landmarks_map_;
+      std::shared_ptr<DBoW3::Vocabulary> ptr_vocal_;
       ///*static*/ Frame::Ptr ptr_reference_frame_;
   };
 }

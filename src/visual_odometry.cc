@@ -14,6 +14,7 @@
 #include <visual_slam/visual_odometry.hh>
 #include <visual_slam/ORBmatcher.hh>
 #include <future>
+#include <utility>
 
 //CODE
 namespace ak
@@ -40,6 +41,16 @@ namespace ak
     vo_params_.init_params_.sigma_2_ = std::pow(vo_params_.init_params_.sigma_, 2);
   }
 
+  VisualOdometry::VisualOdometry(const std::string& vocab_path)
+    : VisualOdometry()
+  {
+    ptr_vocal_ = std::make_shared<DBoW3::Vocabulary>();
+    AK_LOG_INFO << "Loading Vocabulary from txt file";
+    ptr_vocal_->load(vocab_path);
+    AK_LOG_INFO << "Load finished";
+
+  }
+
 
   int VisualOdometry::ShowMatches(const Frame::Ptr& ptr_last_frame,
                                   const Frame::Ptr& ptr_current_frame,
@@ -63,6 +74,10 @@ namespace ak
   int VisualOdometry::newFrame(const cv::Mat& image)
   {
     auto pFrame = Frame::CreateFrame(image);
+    // TODO: (aliben.develop@gmail.com
+    // Construct Frame with Vocabulary
+    pFrame->ptr_vocal_ = ptr_vocal_;
+    pFrame->computeBOW();
     auto num_keypoints = pFrame->getKeyPoints().size();
     if(vo_params_.vo_state_ == NO_IMAGE)
     {
@@ -143,8 +158,18 @@ namespace ak
           AK_LOG_INFO << "Tcw:\n" << transform_current_at_initialized;
           AK_DLOG_INFO << "Init_landmarks: " << Frame::init_landmarks.size();
 
+          frames_vector_.push_back(ptr_last_frame_);
+          frames_vector_.push_back(ptr_current_frame_);
+          keyframes_vector_.push_back(ptr_last_frame_);
+          keyframes_vector_.push_back(ptr_current_frame_);
+          hash_frames_.insert(std::make_pair(ptr_initialized_frame_->getID(), ptr_initialized_frame_));
+          hash_keyframes_.insert(std::make_pair(ptr_initialized_frame_->getID(), ptr_initialized_frame_));
+
           InitMap();
-          exit(0);
+          AK_DLOG_INFO << "MapPoint Size: " << landmarks_map_.size();
+          ptr_last_keyframe_ = ptr_current_frame_;
+          ptr_last_frame_ = ptr_current_frame_;
+          //exit(0);
         }
         else
         {
@@ -157,10 +182,10 @@ namespace ak
       // Initialization Done!
       // Go on track
       AK_LOG_INFO << "Initialization Done!!";
-//      this->keyframes_vector.push_back(pFrame);
-//      this->hash_keyframes.insert(std::make_pair(pFrame->factory_id, pFrame));
-//      this->frames_vector.push_back(pFrame);
-//      this->hash_frames.insert(std::make_pair(pFrame->factory_id, pFrame));
+      this->ptr_current_frame_ = pFrame;
+      this->ptr_last_frame_ = this->ptr_current_frame_;
+      trackWithLastKeyFrame();
+      exit(0);
     }
     //AK_LOG_INFO << "Size of frames: " << Frame::frames_vector.size();
     //AK_LOG_INFO << "Size of hash_frames: " << Frame::hash_frames.size();
@@ -1122,6 +1147,7 @@ namespace ak
       ptr_landmark->addObserver(ptr_current_frame_, trainIdx);
 
       ptr_landmark->updateLandmark();
+      landmarks_map_.insert(std::make_pair(ptr_landmark->getID(), ptr_landmark));
     }
 
     // Add co-vision
@@ -1129,6 +1155,7 @@ namespace ak
     ptr_current_frame_->updateCovision();
 
     // Optimizer setup
+    AK_DLOG_INFO << "Optimization by reprojection error.";
     // Initial a scale for slam, !!! Attension, it is not real distance in the world, they differ with a scale factor, so if we need a real distance for map, there must have another source to confirm the scale factor
     auto median_depth = ptr_initialized_frame_->computeMedianDepth(2);
     auto inv_median_depth = 1.0f/median_depth;
@@ -1149,5 +1176,25 @@ namespace ak
         ptr_landmark->setPosition(ptr_landmark->getPosition()*inv_median_depth);
       }
     }
+  }
+
+  bool VisualOdometry::trackWithLastKeyFrame()
+  {
+    ORBmatcher matcher(0.7, true);
+//    std::vector<Landmark::Ptr> landmarks_matched;
+    std::unordered_map<size_t, Landmark::Ptr> landmarks_matched;
+    int num_matches = matcher.SearchByBoW(ptr_last_keyframe_, ptr_current_frame_, landmarks_matched);
+    AK_DLOG_INFO << "Origin: " << landmarks_matched.size();
+    auto pose = ptr_last_keyframe_->getPose();
+    ptr_current_frame_->setTF(pose);
+    //      this->keyframes_vector.push_back(pFrame);
+    //      this->hash_keyframes.insert(std::make_pair(pFrame->factory_id, pFrame));
+    //      this->frames_vector.push_back(pFrame);
+    //      this->hash_frames.insert(std::make_pair(pFrame->factory_id, pFrame));
+    if(num_matches < 15)
+    {
+      return false;
+    }
+    return false;
   }
 }

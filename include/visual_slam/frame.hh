@@ -19,6 +19,7 @@
 #include <unordered_map>
 #include <opencv2/opencv.hpp>
 #include <opencv2/features2d/features2d.hpp>
+#include <DBoW3/DBoW3.h>
 #include <visual_slam/ORBextractor.hh>
 #include <visual_slam/landmark.hh>
 #include "gtest/gtest_prod.h"
@@ -91,6 +92,14 @@ namespace ak
       {
         return keypoints_;
       };
+      inline const std::unordered_map<size_t, Landmark::Ptr>& getLandmarks()
+      {
+        return landmarks_;
+      }
+      inline const DBoW3::FeatureVector& getFeatureVector()
+      {
+        return feature_vector_;
+      }
       inline const cv::Mat& getDescriptors()
       {
         return descriptors_;
@@ -102,6 +111,14 @@ namespace ak
       inline const cv::Mat& getOrigin()
       {
         return camera_origin_at_world_;
+      }
+      // Set method
+      inline void setTF(const cv::Mat& T21)
+      {
+        transform_camera_at_world_ = T21.clone();
+        cv::Mat Rcw = transform_camera_at_world_.rowRange(0,3).colRange(0,3);
+        cv::Mat tcw = transform_camera_at_world_.rowRange(0,3).col(3);
+        camera_origin_at_world_ = -Rcw.t() * tcw;
       }
       cv::Mat image_;
 
@@ -143,10 +160,29 @@ namespace ak
       void updateCovision();
       void addCovision(const Frame::Ptr& ptr_covision, unsigned int weight);
       float computeMedianDepth(int section);
+      inline void computeBOW()
+      {
+        if(bow_vector_.empty() || feature_vector_.empty())
+        {
+          ptr_vocal_->transform(descriptor_vectors_, bow_vector_, feature_vector_, 4);
+          AK_DLOG_INFO << "Initial Bow and feature";
+          AK_DLOG_INFO << "Bow_vector size: " << bow_vector_.size();
+          AK_DLOG_INFO << "feature_vector size: " << feature_vector_.size();
+          return;
+        }
+        AK_DLOG_WARNING << "No initial bow and feature";
+      }
 
     private:
       ID_t id_;
       cv::Mat descriptors_;
+
+      // Loop Closure
+      std::shared_ptr<DBoW3::Vocabulary> ptr_vocal_;
+      std::vector<cv::Mat> descriptor_vectors_;
+      DBoW3::FeatureVector feature_vector_;
+      DBoW3::BowVector bow_vector_;
+
       std::vector<cv::KeyPoint> keypoints_;
       std::vector<cv::DMatch> best_matches_;
       std::vector<cv::DMatch> best_matches_inliers_;

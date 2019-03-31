@@ -288,6 +288,162 @@ ORBmatcher::ORBmatcher(float nnratio, bool checkOri): mfNNratio(nnratio), mbChec
 //    return nmatches;
 //}
 
+  int ORBmatcher::SearchByBoW(Frame::Ptr& ptr_reference_frame,
+                              Frame::Ptr& ptr_current_frame,
+                              std::unordered_map<size_t, Landmark::Ptr>& landmarks_matched)
+  {
+    // TODO: (aliben.develop@gmail.com)
+    // Remove nullptr from landmarks_matched, makes it more compact
+      auto landmarks_reference = ptr_reference_frame->getLandmarks();
+      auto landmarks_current = ptr_current_frame->getLandmarks();
+      const auto& feature_vector_reference = ptr_reference_frame->getFeatureVector();
+      int num_matches = 0;
+      auto num_feature = ptr_current_frame->getKeyPoints().size();
+      //      landmarks_matched = std::vector<Landmark::Ptr>(num_feature,static_cast<Landmark::Ptr>(nullptr));
+//      landmarks_matched = std::vector<Landmark::Ptr>(num_feature,static_cast<Landmark::Ptr>(nullptr));
+
+      // feature_vector is combination of wordID(first) and keypointIDs(second)
+      const DBoW3::FeatureVector& feature_vector_ref_frame = ptr_reference_frame->getFeatureVector();
+      const DBoW3::FeatureVector& feature_vector_current_frame = ptr_current_frame->getFeatureVector();
+      AK_DLOG_WARNING << "feature vector size: " << feature_vector_ref_frame.size();
+
+      std::vector<int> rotation_histogram[HISTO_LENGTH];
+      for(int i=0;i<HISTO_LENGTH;i++)
+          rotation_histogram[i].reserve(500);
+      const float factor = 1.0f/HISTO_LENGTH;
+
+      // We perform the matching over ORB that belong to the same vocabulary node (at a certain level)
+      DBoW3::FeatureVector::const_iterator KFit = feature_vector_ref_frame.begin();
+      DBoW3::FeatureVector::const_iterator Fit = feature_vector_current_frame.begin();
+      DBoW3::FeatureVector::const_iterator KFend = feature_vector_ref_frame.end();
+      DBoW3::FeatureVector::const_iterator Fend = feature_vector_current_frame.end();
+
+      while(KFit != KFend && Fit != Fend)
+      {
+          if(KFit->first == Fit->first)
+          {
+              // If this was true, which means word is the same
+              const vector<unsigned int> vIndicesKF = KFit->second;
+              const vector<unsigned int> vIndicesF = Fit->second;
+
+              for(size_t iKF=0; iKF<vIndicesKF.size(); iKF++)
+              {
+                  auto realIdxKF = vIndicesKF[iKF];
+
+                  if(landmarks_reference.count(realIdxKF) == 0)
+                  {
+                      continue;
+                  }
+                  else
+                  {
+//                      auto ptr_landmark = landmarks_reference[realIdxKF];
+//                      const unsigned long test_idx = 29;
+                      if(landmarks_reference[realIdxKF]->isGood() == false)
+                      {
+                          continue;
+                      }
+                  }
+                  auto ptr_landmark = landmarks_reference[realIdxKF];
+
+                  //                  auto pMP = landmarks_reference.count(realIdxKF);
+
+//                  if(pMP == nullptr)
+//                      continue;
+//
+//                  if(pMP->isGood() == false)
+//                      continue;
+
+                  const cv::Mat &dKF= ptr_reference_frame->getDescriptors().row(realIdxKF);
+
+                  int bestDist1=256;
+                  int bestIdxF =-1 ;
+                  int bestDist2=256;
+
+                  for(size_t iF=0; iF<vIndicesF.size(); iF++)
+                  {
+                      const unsigned int realIdxF = vIndicesF[iF];
+                      if(landmarks_matched.count(realIdxF) != 0)
+                      {
+                          continue;
+                      }
+                      const cv::Mat &dF = ptr_current_frame->getDescriptors().row(realIdxF);
+
+                      const int dist =  DescriptorDistance(dKF,dF);
+
+                      if(dist<bestDist1)
+                      {
+                          bestDist2=bestDist1;
+                          bestDist1=dist;
+                          bestIdxF=realIdxF;
+                      }
+                      else if(dist<bestDist2)
+                      {
+                          bestDist2=dist;
+                      }
+                  }
+
+                  if(bestDist1<=TH_LOW)
+                  {
+                      if(static_cast<float>(bestDist1)<mfNNratio*static_cast<float>(bestDist2))
+                      {
+                          landmarks_matched[bestIdxF]=ptr_landmark;
+
+                          const cv::KeyPoint &kp = ptr_reference_frame->getKeyPoints()[realIdxKF];
+
+                          if(mbCheckOrientation)
+                          {
+                              float rot = kp.angle-ptr_current_frame->getKeyPoints()[bestIdxF].angle;
+                              if(rot<0.0)
+                                  rot+=360.0f;
+                              int bin = round(rot*factor);
+                              if(bin==HISTO_LENGTH)
+                                  bin=0;
+                              assert(bin>=0 && bin<HISTO_LENGTH);
+                              rotation_histogram[bin].push_back(bestIdxF);
+                          }
+                          num_matches++;
+                      }
+                  }
+
+              }
+
+              KFit++;
+              Fit++;
+          }
+          else if(KFit->first < Fit->first)
+          {
+              KFit = feature_vector_ref_frame.lower_bound(Fit->first);
+          }
+          else
+          {
+              Fit = ptr_current_frame->getFeatureVector().lower_bound(KFit->first);
+          }
+      }
+
+
+      if(mbCheckOrientation)
+      {
+          int ind1=-1;
+          int ind2=-1;
+          int ind3=-1;
+
+          ComputeThreeMaxima(rotation_histogram,HISTO_LENGTH,ind1,ind2,ind3);
+
+          for(int i=0; i<HISTO_LENGTH; i++)
+          {
+              if(i==ind1 || i==ind2 || i==ind3)
+                  continue;
+              for(size_t j=0, jend=rotation_histogram[i].size(); j<jend; j++)
+              {
+                  landmarks_matched[rotation_histogram[i][j]]=static_cast<Landmark::Ptr>(nullptr);
+                  num_matches--;
+              }
+          }
+      }
+
+      return num_matches;
+  }
+
 //int ORBmatcher::SearchByProjection(KeyFrame* pKF, cv::Mat Scw, const vector<MapPoint*> &vpPoints, vector<MapPoint*> &vpMatched, int th)
 //{
 //    // Get Calibration Parameters for later projection

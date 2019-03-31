@@ -38,6 +38,7 @@ namespace ak
   Frame::Frame(ID_t id)
     : id_(id)
   {
+//    ptr_vocal_ = std::make_shared<DBoW3::Vocabulary>();
   }
 
   Frame::Ptr Frame::CreateFrame(const cv::Mat& image,
@@ -62,6 +63,13 @@ namespace ak
                                                 cv::Mat(),
                                                 this->keypoints_,
                                                 this->descriptors_);
+      auto rows = descriptors_.rows;
+      descriptor_vectors_.clear();
+      descriptor_vectors_.reserve(rows);
+      for(int i = 0;i<rows;++i)
+      {
+        this->descriptor_vectors_.push_back(this->descriptors_.row(i));
+      }
       //(*Frame::ptr_orb_extractor_advanced)(image,
       //                                     cv::Mat(),
       //                                     this->keypoints_,
@@ -177,7 +185,7 @@ namespace ak
   {
       landmarks_.insert(std::pair<size_t, Landmark::Ptr>(kp_index, ptr_landmark));
       landmarks_index_query_.insert(std::pair<ID_t, size_t>(ptr_landmark->getID(), kp_index));
-      AK_DLOG_INFO << "Landmark ID: " << ptr_landmark->getID() << "\tKP index: " << kp_index;
+      //AK_DLOG_INFO << "Landmark ID: " << ptr_landmark->getID() << "\tKP index: " << kp_index;
   }
 
   void Frame::updateCovision()
