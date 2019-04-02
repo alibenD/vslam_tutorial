@@ -15,6 +15,7 @@
 // Header include
 #include <visual_slam/frame.hh>
 #include <visual_slam/landmark.hh>
+#include <visual_slam/optimizer.hh>
 
 // Declaration
 namespace ak
@@ -152,8 +153,10 @@ namespace ak
       std::shared_ptr<ORBmatcher> ptr_orb_matcher_init_advanced;
       VO_PARAMETER vo_params_;
       std::unordered_map<ID_t, Landmark::Ptr> landmarks_map_;
+      std::vector<Landmark::Ptr> landmarks_;
       std::shared_ptr<DBoW3::Vocabulary> ptr_vocal_;
       ///*static*/ Frame::Ptr ptr_reference_frame_;
+      Optimizer::Ptr ptr_optimizer_;
   };
 }
 #endif // __VISUAL_ODOMETRY_HH__

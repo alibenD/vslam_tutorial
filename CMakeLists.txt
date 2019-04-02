@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-03-21 15:38:41
+# @last_modified_date: 2019-03-31 23:25:34
 # @description: TODO
 #---****************************************************************---
 
@@ -128,6 +128,7 @@ project(visual_slam)
     ${Sophus_LIBRARIES}
     ${OpenCV_LIBS}
     ${LIBS}
+    ${G2O_TYPES_SBA}
     ${G2O_STUFF_LIBRARY}
     ${G2O_CORE_LIBRARY}
     ${G2O_CLI_LIBRARY}

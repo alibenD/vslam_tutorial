@@ -34,6 +34,7 @@ namespace ak
       ptr_orb_matcher_init_advanced(nullptr)
   {
     ptr_orb_matcher_init_advanced = std::make_shared<ORBmatcher>(0.9, true);
+    ptr_optimizer_ = std::make_shared<Optimizer>();
     vo_params_.K_ = (cv::Mat_<float>(3,3) << 718.85602, 0, 607.1928,
                                               0, 718.85602, 185.2157,
                                               0,       0,        1);
@@ -155,7 +156,6 @@ namespace ak
 
           ptr_current_frame_->transform_camera_at_world_ = transform_current_at_initialized;
           ptr_current_frame_->camera_origin_at_world_ = camera_origin_at_world;
-          AK_LOG_INFO << "Tcw:\n" << transform_current_at_initialized;
           AK_DLOG_INFO << "Init_landmarks: " << Frame::init_landmarks.size();
 
           frames_vector_.push_back(ptr_last_frame_);
@@ -165,10 +165,15 @@ namespace ak
           hash_frames_.insert(std::make_pair(ptr_initialized_frame_->getID(), ptr_initialized_frame_));
           hash_keyframes_.insert(std::make_pair(ptr_initialized_frame_->getID(), ptr_initialized_frame_));
 
+          AK_LOG_INFO << "Before Tcw:\n" << ptr_current_frame_->transform_camera_at_world_;
           InitMap();
+          AK_LOG_INFO << "After Optimization Tcw:\n" << ptr_current_frame_->transform_camera_at_world_;
+
           AK_DLOG_INFO << "MapPoint Size: " << landmarks_map_.size();
           ptr_last_keyframe_ = ptr_current_frame_;
           ptr_last_frame_ = ptr_current_frame_;
+          AK_LOG_INFO << "Initialization Done!!";
+
           //exit(0);
         }
         else
@@ -181,7 +186,6 @@ namespace ak
     {
       // Initialization Done!
       // Go on track
-      AK_LOG_INFO << "Initialization Done!!";
       this->ptr_current_frame_ = pFrame;
       this->ptr_last_frame_ = this->ptr_current_frame_;
       trackWithLastKeyFrame();
@@ -1148,6 +1152,7 @@ namespace ak
 
       ptr_landmark->updateLandmark();
       landmarks_map_.insert(std::make_pair(ptr_landmark->getID(), ptr_landmark));
+      landmarks_.push_back(ptr_landmark);
     }
 
     // Add co-vision
@@ -1157,6 +1162,8 @@ namespace ak
     // Optimizer setup
     AK_DLOG_INFO << "Optimization by reprojection error.";
     // Initial a scale for slam, !!! Attension, it is not real distance in the world, they differ with a scale factor, so if we need a real distance for map, there must have another source to confirm the scale factor
+    ptr_optimizer_->bundleAdjustment(keyframes_vector_, landmarks_, vo_params_.K_, vo_params_.init_params_.sigma_, 20);
+    AK_DLOG_INFO << "Global optimizating Done!";
     auto median_depth = ptr_initialized_frame_->computeMedianDepth(2);
     auto inv_median_depth = 1.0f/median_depth;
 
