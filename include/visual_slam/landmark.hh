@@ -71,12 +71,25 @@ namespace ak
       {
         return is_good_;
       }
+      inline void setInMap(bool flag)
+      {
+        flag_include_in_map_ = flag;
+      }
+      inline bool isInMap()
+      {
+        return flag_include_in_map_;
+      }
+//      inline bool isDrop()
+//      {
+//        return is_drop_;
+//      }
+      void updateLandmark();
+
       static ID_t factory_id;
 
     protected:
       void addObserver(const std::shared_ptr<Frame>& ptr_observer_frame,
                        size_t kp_idx);
-      void updateLandmark();
       void updateMeanDescriptor();
       void updateNormalRepresentation();
 
@@ -88,6 +101,9 @@ namespace ak
       Property property_;
       Count_t num_observation_times_;
       bool is_good_{true};
+      bool flag_include_in_map_{true};
+//      bool is_drop_{false};
+
       std::pair<std::shared_ptr<Frame>, std::shared_ptr<Frame>> first_frame_pair_;
       std::unordered_map<std::shared_ptr<Frame>, size_t> observers_;    /*! Observation FrameID and correspond keypointID*/
       std::vector<cv::Mat> descriptors_all_observed_; /*! Description for all observations */

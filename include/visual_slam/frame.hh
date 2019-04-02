@@ -112,6 +112,10 @@ namespace ak
       {
         return camera_origin_at_world_;
       }
+      inline bool isGood()
+      {
+        return is_good_;
+      }
       // Set method
       inline void setTF(const cv::Mat& T21)
       {
@@ -120,7 +124,6 @@ namespace ak
         cv::Mat tcw = transform_camera_at_world_.rowRange(0,3).col(3);
         camera_origin_at_world_ = -Rcw.t() * tcw;
       }
-      cv::Mat image_;
 
     public:
       static Frame::Ptr CreateFrame(const cv::Mat& image,
@@ -131,7 +134,9 @@ namespace ak
                                                 const int& min_pyramid_level,
                                                 const int& max_pyramid_level);
       static int factory_id;
-      static std::vector<std::pair<size_t, cv::Point3f>> init_landmarks;
+      static std::vector<std::pair<size_t, cv::Point3f>> raw_init_landmarks;
+      cv::Mat image_;
+
       // keypoints_index, ptr_landmark
       std::unordered_map<size_t, Landmark::Ptr> landmarks_;
       // landmark_index, keypoint_index
@@ -194,7 +199,11 @@ namespace ak
       // Pose opencv
       cv::Mat transform_camera_at_world_;  // TF21
       cv::Mat camera_origin_at_world_;
+      cv::Mat transform_optimized_;
       bool init_covision_{false};
+      bool is_good_{true};
+      unsigned int num_ba_global_{0};
+//      bool is_drop_{false};
       //cv::Mat translation_;
       //cv::Mat rotation_;
       // Pose SE3
