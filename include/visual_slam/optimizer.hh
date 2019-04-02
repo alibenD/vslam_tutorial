@@ -16,6 +16,7 @@
 #include <visual_slam/logger_advanced.hh>
 #include <visual_slam/landmark.hh>
 #include <visual_slam/frame.hh>
+#include <visual_slam/map.hh>
 #include <g2o/types/sba/types_six_dof_expmap.h>
 
 // Declaration
@@ -40,7 +41,13 @@ namespace ak
                             const unsigned long num_loop_keyframe = 0,
                             const bool flag_robust = true
                             );
-      //globalBundleAdjustment();
+      void globalBundleAdjustment(const Map::Ptr& ptr_map,
+                                  const cv::Mat& K,
+                                  float& sigma2,
+                                  int iteration = 5,
+                                  bool* ptr_stop_flag = nullptr,
+                                  const unsigned long num_loop_keyframe = 0,
+                                  const bool flag_robust = true);
   };
 }
 #endif // __OPTIMIZER_HH__

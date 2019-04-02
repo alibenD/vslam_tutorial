@@ -15,6 +15,7 @@
 // Header include
 #include <visual_slam/frame.hh>
 #include <visual_slam/landmark.hh>
+#include <visual_slam/map.hh>
 #include <visual_slam/optimizer.hh>
 
 // Declaration
@@ -136,10 +137,10 @@ namespace ak
       bool trackWithLastKeyFrame();
 
     public:
-      /*static*/ std::vector<Frame::Ptr> frames_vector_;
-      /*static*/ std::vector<Frame::Ptr> keyframes_vector_;
-      /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_frames_;
-      /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_keyframes_;
+//      /*static*/ std::vector<Frame::Ptr> frames_vector_;
+//      /*static*/ std::vector<Frame::Ptr> keyframes_vector_;
+//      /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_frames_;
+//      /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_keyframes_;
       std::vector<cv::DMatch> best_matches_;
       std::vector<cv::DMatch> best_matches_inliers_;
 
@@ -151,6 +152,7 @@ namespace ak
       ///*static*/ VO_STATE vo_state;
       /*static*/ std::vector<std::vector<cv::DMatch>> ransec_matched_points_set_;
       std::shared_ptr<ORBmatcher> ptr_orb_matcher_init_advanced;
+      Map::Ptr ptr_map_;
       VO_PARAMETER vo_params_;
       std::unordered_map<ID_t, Landmark::Ptr> landmarks_map_;
       std::vector<Landmark::Ptr> landmarks_;

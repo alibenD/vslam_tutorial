@@ -134,7 +134,7 @@ namespace ak
                                                 const int& min_pyramid_level,
                                                 const int& max_pyramid_level);
       static int factory_id;
-      static std::vector<std::pair<size_t, cv::Point3f>> init_landmarks;
+      static std::vector<std::pair<size_t, cv::Point3f>> raw_init_landmarks;
       cv::Mat image_;
 
       // keypoints_index, ptr_landmark

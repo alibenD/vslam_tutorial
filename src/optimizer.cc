@@ -62,6 +62,7 @@ namespace ak
 
     std::vector<g2o::VertexSE3Expmap*> release_frame_list;
     std::vector<g2o::VertexSBAPointXYZ*> release_landmark_list;
+    int count_keyframe = 0;
     for(const auto& ptr_keyframe:keyframes)
     {
       if(ptr_keyframe->isGood() == false || ptr_keyframe == nullptr)
@@ -85,7 +86,8 @@ namespace ak
       // TODO: (aliben.develop@gmail.com)
       // Set the first keyframe as fixed but not ID is equal to 0.
       AK_DLOG_WARNING << "For now, set 0-th frame as fixed";
-      vertex_frame->setFixed(ptr_keyframe->getID() == 0);
+      vertex_frame->setFixed(count_keyframe == 0);
+      count_keyframe++;
       graph.addVertex(vertex_frame);
       if(ptr_keyframe->getID() > max_id)
       {
@@ -157,7 +159,7 @@ namespace ak
         ptr_landmark->setInMap(true);
       }
     }
-    //graph.setVerbose(true);
+    graph.setVerbose(true);
     graph.initializeOptimization();
     graph.optimize(iteration);
 
@@ -202,5 +204,18 @@ namespace ak
       ptr_landmark->setPosition(cv::Point3f(point(0), point(1), point(2)));
       ptr_landmark->updateLandmark();
     }
+  }
+
+  void Optimizer::globalBundleAdjustment(const ak::Map::Ptr& ptr_map,
+                                         const cv::Mat& K,
+                                         float& sigma2,
+                                         int iteration,
+                                         bool* ptr_stop_flag,
+                                         const unsigned long num_loop_keyframe,
+                                         const bool flag_robust)
+  {
+    auto keyframes = ptr_map->getKeyframes();
+    auto landmarks = ptr_map->getLandmarks();
+    bundleAdjustment(keyframes, landmarks, K, sigma2, iteration, ptr_stop_flag, num_loop_keyframe, flag_robust);
   }
 }

@@ -33,7 +33,7 @@ namespace ak
   ORBextractor::Ptr Frame::ptr_orb_extractor_advanced = std::make_shared<ORBextractor>(NUM_FEATURES,LEVEL_SCALE_FACTOR,NUM_LEVELS,INIT_FAST,MIN_FAST);
   //ORBmatcher::Ptr Frame::ptr_orb_matcher_init_advanced = std::make_shared<ORBextractor>(0.9, true);
   int Frame::factory_id = 0;
-  std::vector<std::pair<size_t, cv::Point3f>> Frame::init_landmarks;
+  std::vector<std::pair<size_t, cv::Point3f>> Frame::raw_init_landmarks;
 
   Frame::Frame(ID_t id)
     : id_(id)

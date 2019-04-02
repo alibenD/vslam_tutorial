@@ -35,6 +35,7 @@ namespace ak
   {
     ptr_orb_matcher_init_advanced = std::make_shared<ORBmatcher>(0.9, true);
     ptr_optimizer_ = std::make_shared<Optimizer>();
+    ptr_map_ = std::make_shared<Map>();
     vo_params_.K_ = (cv::Mat_<float>(3,3) << 718.85602, 0, 607.1928,
                                               0, 718.85602, 185.2157,
                                               0,       0,        1);
@@ -156,14 +157,18 @@ namespace ak
 
           ptr_current_frame_->transform_camera_at_world_ = transform_current_at_initialized;
           ptr_current_frame_->camera_origin_at_world_ = camera_origin_at_world;
-          AK_DLOG_INFO << "Init_landmarks: " << Frame::init_landmarks.size();
+          AK_DLOG_INFO << "raw_init_landmarks: " << Frame::raw_init_landmarks.size();
 
-          frames_vector_.push_back(ptr_last_frame_);
-          frames_vector_.push_back(ptr_current_frame_);
-          keyframes_vector_.push_back(ptr_last_frame_);
-          keyframes_vector_.push_back(ptr_current_frame_);
-          hash_frames_.insert(std::make_pair(ptr_initialized_frame_->getID(), ptr_initialized_frame_));
-          hash_keyframes_.insert(std::make_pair(ptr_initialized_frame_->getID(), ptr_initialized_frame_));
+          //frames_vector_.push_back(ptr_last_frame_);
+          //frames_vector_.push_back(ptr_current_frame_);
+          //keyframes_vector_.push_back(ptr_last_frame_);
+          //keyframes_vector_.push_back(ptr_current_frame_);
+          //hash_frames_.insert(std::make_pair(ptr_initialized_frame_->getID(), ptr_initialized_frame_));
+          //hash_keyframes_.insert(std::make_pair(ptr_initialized_frame_->getID(), ptr_initialized_frame_));
+//          ptr_map_->addFrame(ptr_last_frame_);
+//          ptr_map_->addFrame(ptr_current_frame_);
+          ptr_map_->addKeyFrame(ptr_last_frame_);
+          ptr_map_->addKeyFrame(ptr_current_frame_);
 
           AK_LOG_INFO << "Before Tcw:\n" << ptr_current_frame_->transform_camera_at_world_;
           InitMap();
@@ -256,7 +261,7 @@ namespace ak
                                  vo_params_.K_,
                                  Rcw,
                                  tcw,
-                                 Frame::init_landmarks,
+                                 Frame::raw_init_landmarks,
                                  1.0,
                                  50);
     }
@@ -269,7 +274,7 @@ namespace ak
                                  vo_params_.K_,
                                  Rcw,
                                  tcw,
-                                 Frame::init_landmarks,
+                                 Frame::raw_init_landmarks,
                                  1.0,
                                  50);
     }
@@ -657,7 +662,7 @@ namespace ak
                                            cv::Mat& K,
                                            cv::Mat& R21,
                                            cv::Mat& t21,
-                                           std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
+                                           std::vector<std::pair<size_t, cv::Point3f>>& raw_init_landmarks,
                                            float min_parallax,
                                            int min_triangulated)
   {
@@ -810,7 +815,7 @@ namespace ak
     {
       vector_R[bestSolutionIdx].copyTo(R21);
       vector_t[bestSolutionIdx].copyTo(t21);
-      init_landmarks = bestP3D;
+      raw_init_landmarks = bestP3D;
       return true;
     }
     return false;
@@ -821,7 +826,7 @@ namespace ak
                                            cv::Mat& K,
                                            cv::Mat& R21,
                                            cv::Mat& t21,
-                                           std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
+                                           std::vector<std::pair<size_t, cv::Point3f>>& raw_init_landmarks,
                                            float min_parallax,
                                            int min_triangulated)
   {
@@ -908,8 +913,8 @@ namespace ak
     {
       if(parallax1>min_parallax)
       {
-        init_landmarks = vP3D1;
-//        init_landmarks = bestTriangulated1;
+        raw_init_landmarks = vP3D1;
+//        raw_init_landmarks = bestTriangulated1;
         //vbTriangulated = vbTriangulated1;
         R1.copyTo(R21);
         t1.copyTo(t21);
@@ -920,9 +925,9 @@ namespace ak
     {
       if(parallax2>min_parallax)
       {
-        init_landmarks = vP3D2;
+        raw_init_landmarks = vP3D2;
         //vbTriangulated = vbTriangulated2;
-//        init_landmarks = bestTriangulated2;
+//        raw_init_landmarks = bestTriangulated2;
         R2.copyTo(R21);
         t1.copyTo(t21);
         return true;
@@ -932,9 +937,9 @@ namespace ak
     {
       if(parallax3>min_parallax)
       {
-        init_landmarks = vP3D3;
+        raw_init_landmarks = vP3D3;
         //vbTriangulated = vbTriangulated3;
-//        init_landmarks = bestTriangulated3;
+//        raw_init_landmarks = bestTriangulated3;
         R1.copyTo(R21);
         t2.copyTo(t21);
         return true;
@@ -944,9 +949,9 @@ namespace ak
     {
       if(parallax4>min_parallax)
       {
-        init_landmarks = vP3D4;
+        raw_init_landmarks = vP3D4;
         //vbTriangulated = vbTriangulated4;
-//        init_landmarks = bestTriangulated4;
+//        raw_init_landmarks = bestTriangulated4;
         R2.copyTo(R21);
         t2.copyTo(t21);
         return true;
@@ -962,7 +967,7 @@ namespace ak
                               const std::vector<cv::KeyPoint>& keypoints_cur,
                               const std::vector<cv::DMatch>& matched_inliers,
                               const cv::Mat& K,
-                              std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
+                              std::vector<std::pair<size_t, cv::Point3f>>& raw_init_landmarks,
                               float th2,
                               float& parallax
                      )
@@ -1058,8 +1063,8 @@ namespace ak
       vCosParallax.push_back(cosParallax);
       //vP3D[vMatches12[i].first] = cv::Point3f(p3dC1.at<float>(0),p3dC1.at<float>(1),p3dC1.at<float>(2));
       auto landmark = cv::Point3f(p3dC1.at<float>(0),p3dC1.at<float>(1),p3dC1.at<float>(2));
-      //init_landmarks.push_back(std::make_pair(matched_inliers[i].queryIdx, landmark));
-      init_landmarks.push_back(std::make_pair(i, landmark));
+      //raw_init_landmarks.push_back(std::make_pair(matched_inliers[i].queryIdx, landmark));
+      raw_init_landmarks.push_back(std::make_pair(i, landmark));
 
       nGood++;
 
@@ -1130,13 +1135,13 @@ namespace ak
 
   void VisualOdometry::InitMap()
   {
-    auto init_landmarks_size = Frame::init_landmarks.size();
-    AK_DLOG_WARNING << "Init landmark: " << init_landmarks_size;
-    for(size_t i=0; i<init_landmarks_size; ++i)
+    auto raw_init_landmarks_size = Frame::raw_init_landmarks.size();
+    AK_DLOG_WARNING << "Init landmark: " << raw_init_landmarks_size;
+    for(size_t i=0; i<raw_init_landmarks_size; ++i)
     {
-      //cv::Mat position_at_world(Frame::init_landmarks[i].second);
-      auto position_at_world = Frame::init_landmarks[i].second;
-      auto idx_matched = Frame::init_landmarks[i].first;
+      //cv::Mat position_at_world(Frame::raw_init_landmarks[i].second);
+      auto position_at_world = Frame::raw_init_landmarks[i].second;
+      auto idx_matched = Frame::raw_init_landmarks[i].first;
       auto ptr_landmark = Landmark::CreateLandmark(ptr_initialized_frame_, ptr_current_frame_, position_at_world);
 //      AK_DLOG_ERROR << "Num: " << ptr_initialized_frame_->best_matches_inliers_[idx_matched].queryIdx;
       //AK_DLOG_INFO << "Init Frame:";
@@ -1151,8 +1156,7 @@ namespace ak
       ptr_landmark->addObserver(ptr_current_frame_, trainIdx);
 
       ptr_landmark->updateLandmark();
-      landmarks_map_.insert(std::make_pair(ptr_landmark->getID(), ptr_landmark));
-      landmarks_.push_back(ptr_landmark);
+      ptr_map_->addLandmark(ptr_landmark);
     }
 
     // Add co-vision
@@ -1162,7 +1166,8 @@ namespace ak
     // Optimizer setup
     AK_DLOG_INFO << "Optimization by reprojection error.";
     // Initial a scale for slam, !!! Attension, it is not real distance in the world, they differ with a scale factor, so if we need a real distance for map, there must have another source to confirm the scale factor
-    ptr_optimizer_->bundleAdjustment(keyframes_vector_, landmarks_, vo_params_.K_, vo_params_.init_params_.sigma_, 20);
+    //ptr_optimizer_->bundleAdjustment(keyframes_vector_, landmarks_, vo_params_.K_, vo_params_.init_params_.sigma_, 20);
+    ptr_optimizer_->globalBundleAdjustment(ptr_map_, vo_params_.K_, vo_params_.init_params_.sigma_, 20);
     AK_DLOG_INFO << "Global optimizating Done!";
     auto median_depth = ptr_initialized_frame_->computeMedianDepth(2);
     auto inv_median_depth = 1.0f/median_depth;
