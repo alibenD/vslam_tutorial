@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-03 11:06:28
-  * @last_modified_date: 2019-03-03 14:51:57
+  * @last_modified_date: 2019-04-22 12:50:10
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -62,13 +62,22 @@ namespace ak
 
       int initializeMap();
 
+    protected:
+      void resetLocalMap();
+      void updateLocalMap();
+
+
     private:
     /*static*/ std::vector<Frame::Ptr> frames_vector_;
     /*static*/ std::vector<Frame::Ptr> keyframes_vector_;
-    /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_frames_;
-    /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_keyframes_;
-    std::unordered_map<Landmark::ID_t, Landmark::Ptr> hash_landmarks_;
     std::vector<Landmark::Ptr> landmarks_vector_;
+    /*static*/ std::unordered_map<ID_t, Frame::Ptr> hash_frames_;
+    /*static*/ std::unordered_map<ID_t, Frame::Ptr> hash_keyframes_;
+    std::unordered_map<Landmark::ID_t, Landmark::Ptr> hash_landmarks_;
+
+    //Local Map
+    std::vector<Frame::Ptr> local_keyframes_;
+    std::vector<Landmark::Ptr> local_landmarks_;
   };
 }
 #endif // __MAP_HH__

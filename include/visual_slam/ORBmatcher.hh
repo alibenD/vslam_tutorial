@@ -35,7 +35,8 @@
 
 namespace ak
 {
-class ORBmatcher
+  
+class ORBmatcher : public std::enable_shared_from_this<ORBmatcher>
 {    
 public:
     using Ptr = std::shared_ptr<ORBmatcher>;

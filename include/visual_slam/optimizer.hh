@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-31 18:50:05
-  * @last_modified_date: 2019-04-01 12:25:41
+  * @last_modified_date: 2019-04-12 08:50:30
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -48,6 +48,11 @@ namespace ak
                                   bool* ptr_stop_flag = nullptr,
                                   const unsigned long num_loop_keyframe = 0,
                                   const bool flag_robust = true);
+
+      int PoseOptimization(const Frame::Ptr& ptr_frame,
+                           const cv::Mat& K,
+                           float& sigma2
+                           );
   };
 }
 #endif // __OPTIMIZER_HH__

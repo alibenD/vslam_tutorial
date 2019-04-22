@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-31 18:50:05
-  * @last_modified_date: 2019-04-01 14:08:56
+  * @last_modified_date: 2019-04-22 12:54:48
   * @brief: TODO
   * @details: TODO
   */
@@ -52,7 +52,7 @@ namespace ak
     std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> ptr_linear_solver = g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>>();
     g2o::OptimizationAlgorithmLevenberg* ptr_solver = new g2o::OptimizationAlgorithmLevenberg(g2o::make_unique<g2o::BlockSolver_6_3>(std::move(ptr_linear_solver)));
 
-    Frame::ID_t max_id;
+    ID_t max_id;
 
     graph.setAlgorithm(ptr_solver);
     if(ptr_stop_flag != nullptr)
@@ -217,5 +217,165 @@ namespace ak
     auto keyframes = ptr_map->getKeyframes();
     auto landmarks = ptr_map->getLandmarks();
     bundleAdjustment(keyframes, landmarks, K, sigma2, iteration, ptr_stop_flag, num_loop_keyframe, flag_robust);
+  }
+
+  int Optimizer::PoseOptimization(const Frame::Ptr& ptr_frame,
+                                  const cv::Mat& K,
+                                  float& sigma2
+                                  )
+  {
+    AK_DLOG_WARNING << "Pose Optimization";
+    g2o::SparseOptimizer graph;
+    std::unique_ptr<g2o::BlockSolver_6_3::LinearSolverType> ptr_linear_solver = g2o::make_unique<g2o::LinearSolverEigen<g2o::BlockSolver_6_3::PoseMatrixType>>();
+    g2o::OptimizationAlgorithmLevenberg* ptr_solver = new g2o::OptimizationAlgorithmLevenberg(g2o::make_unique<g2o::BlockSolver_6_3>(std::move(ptr_linear_solver)));
+
+    graph.setAlgorithm(ptr_solver);
+
+    //int num_initial_correspondences = 0;
+
+    auto vertex_frame = new g2o::VertexSE3Expmap();
+
+    // TODO: (aliben.develop@gmail.com)
+    // The convert will be packaged into an obj.
+    Eigen::Matrix<double, 3, 3> R;
+    auto TF = ptr_frame->getPose();
+    R << TF.at<float>(0,0) , TF.at<float>(0,1) , TF.at<float>(0,2),
+      TF.at<float>(1,0) , TF.at<float>(1,1) , TF.at<float>(1,2),
+      TF.at<float>(2,0) , TF.at<float>(2,1) , TF.at<float>(2,2);
+    Eigen::Matrix<double, 3, 1> t(TF.at<float>(0,3), TF.at<float>(1,3), TF.at<float>(2,3));
+    vertex_frame->setEstimate(g2o::SE3Quat(R, t));
+    vertex_frame->setId(0);
+    vertex_frame->setFixed(false);
+    graph.addVertex(vertex_frame);
+
+    auto landmarks = ptr_frame->getLandmarks();
+    auto size_landmark = landmarks.size();
+    std::vector<g2o::EdgeSE3ProjectXYZOnlyPose*> edge_vector;
+    std::vector<bool> outlier_vector;
+    edge_vector.reserve(size_landmark);
+    outlier_vector.reserve(size_landmark);
+
+    const float deltaMono = sqrt(5.991);
+//    const float thHuber3D = sqrt(7.815);
+    int debug_index = 0;
+    for(const auto& landmark_pair : landmarks)
+    {
+      //++num_initial_correspondences;
+      const auto& keypoint = ptr_frame->getKeyPoints()[landmark_pair.first];
+      auto ptr_landmark = landmark_pair.second;
+      assert(ptr_landmark!=nullptr);
+      Eigen::Matrix<double, 2, 1> measurement;
+      measurement << keypoint.pt.x, keypoint.pt.y;
+
+      g2o::EdgeSE3ProjectXYZOnlyPose* edge = new g2o::EdgeSE3ProjectXYZOnlyPose();
+      edge->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(graph.vertex(0)));
+      edge->setMeasurement(measurement);
+      const float inv_sigma2 = sigma2==0. ? 0 : std::pow(1/sigma2, keypoint.octave);
+      edge->setInformation(Eigen::Matrix2d::Identity() * inv_sigma2);
+
+      g2o::RobustKernelHuber* robust_kernel = new g2o::RobustKernelHuber;
+      edge->setRobustKernel(robust_kernel);
+      robust_kernel->setDelta(deltaMono);
+
+      edge->fx = K.at<float>(0,0);
+      edge->fy = K.at<float>(1,1);
+      edge->cx = K.at<float>(0,2);
+      edge->cy = K.at<float>(1,2);
+      assert(ptr_landmark!=nullptr);
+
+      //      AK_DLOG_INFO << "Debug Index: " << debug_index;
+//      if(ptr_landmark == nullptr)
+//      {
+//        AK_DLOG_FATAL << "ptr_landmark is nullptr";
+//      }
+      //AK_DLOG_INFO << "Landmark ID: " << ptr_landmark->getID();
+      auto point_location = ptr_landmark->getPosition();
+      edge->Xw[0] = point_location.x;
+      edge->Xw[1] = point_location.y;
+      edge->Xw[2] = point_location.z;
+
+      graph.addEdge(edge);
+      edge_vector.emplace_back(edge);
+      outlier_vector.push_back(false);
+      ++debug_index;
+    }
+
+    if(size_landmark<3)
+    {
+      return 0;
+    }
+
+    const float chi2Mono[4] = {5.991, 5.991, 5.991, 5.991};
+    const int iteration[4] = {10, 10, 10, 10};
+    int num_bad_edge = 0;
+    
+    for(int i=0; i<4; ++i)
+    {
+      Eigen::Matrix<double, 3, 3> R_iter;
+      auto TF_iter = ptr_frame->getPose();
+      R_iter << TF_iter.at<float>(0,0) , TF_iter.at<float>(0,1) , TF_iter.at<float>(0,2),
+        TF_iter.at<float>(1,0) , TF_iter.at<float>(1,1) , TF_iter.at<float>(1,2),
+        TF_iter.at<float>(2,0) , TF_iter.at<float>(2,1) , TF_iter.at<float>(2,2);
+      Eigen::Matrix<double, 3, 1> t_iter(TF_iter.at<float>(0,3), TF_iter.at<float>(1,3), TF_iter.at<float>(2,3));
+      vertex_frame->setEstimate(g2o::SE3Quat(R_iter, t_iter));
+
+      graph.initializeOptimization(0);
+      graph.optimize(iteration[i]);
+
+      num_bad_edge = 0;
+
+      size_t index = 0;
+      for(auto& edge:edge_vector)
+      {
+        if(outlier_vector[index] == false)
+        {
+          edge->computeError();
+        }
+        const float chi2 = edge->chi2();
+        if(chi2 > chi2Mono[i])
+        {
+          outlier_vector[index] = true;
+          edge->setLevel(1);
+          ++num_bad_edge;
+        }
+        else
+        {
+          outlier_vector[index] = false;
+          edge->setLevel(0);
+        }
+
+        if(i == 2)
+        {
+          edge->setRobustKernel(0);
+        }
+        ++index;
+      }
+
+      if(graph.edges().size() < 10)
+      {
+        break;
+      }
+
+    }
+
+    //g2o::VertexSE3Expmap* vSE3_recov = static_cast<g2o::VertexSE3Expmap*>(optimizer.vertex(0));
+    //g2o::SE3Quat SE3quat_recov = vSE3_recov->estimate();
+    //cv::Mat pose = Converter::toCvMat(SE3quat_recov);
+    //pFrame->SetPose(pose);
+    //return nInitialCorrespondences-nBad;
+
+    auto vertex_recovery = static_cast<g2o::VertexSE3Expmap*>(graph.vertex(0));
+    g2o::SE3Quat SE3quat_recovery = vertex_recovery->estimate();
+    Eigen::Matrix<double,4,4> eigMat = SE3quat_recovery.to_homogeneous_matrix();
+    cv::Mat cvMat(4,4,CV_32F);
+    for(int i=0; i<4; ++i)
+    {
+      for(int j=0; j<4; ++j)
+      {
+        cvMat.at<float>(i,j)=eigMat(i,j);
+      }
+    }
+    ptr_frame->setTF(cvMat);
+    return size_landmark - num_bad_edge;
   }
 }

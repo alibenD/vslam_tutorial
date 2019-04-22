@@ -28,6 +28,7 @@ int main(int argc, char** argv)
   AK_LOG(INFO) << "Count: " << num_img << "\tFrom: " << fold_path << std::endl;
   std::string name_window = "Image";
   cv::namedWindow(name_window, cv::WINDOW_NORMAL);
+  cv::Mat img_with_kp;
 
   VisualOdometry::Ptr ptr_vo = std::make_shared<VisualOdometry>(vocab);
   for(auto img_name : img_lists)
@@ -37,6 +38,9 @@ int main(int argc, char** argv)
     //auto img = cv::imread(img_path);
     cv::Mat img_current = cv::imread(img_path, cv::IMREAD_GRAYSCALE);
     ptr_vo->newFrame(img_current);
+    ptr_vo->ShowMatches(name_window);
+//    cv::imshow(name_window, img_with_kp);
+//    cv::waitKey(30);
   }
   return 0;
 }

@@ -51,6 +51,10 @@ namespace ak
       static Landmark::Ptr CreateLandmark(std::shared_ptr<Frame>& ptr_last_frame,
                                           std::shared_ptr<Frame>& ptr_current_frame,
                                           const cv::Point3f& position);
+      inline Count_t getObservationTimes()
+      {
+        return num_observation_times_;
+      }
       inline const std::unordered_map<std::shared_ptr<Frame>, size_t>& getObservers()
       {
         return observers_;
