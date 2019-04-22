@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-01-21 16:11:21
-  * @last_modified_date: 2019-03-02 22:26:12
+  * @last_modified_date: 2019-04-22 17:38:22
   * @brief: TODO
   * @details: TODO
   */
@@ -23,60 +23,30 @@
 namespace ak
 {
   using namespace std::chrono;
-  /*const*/ int NUM_FEATURES = 2000;
-  /*const*/ float LEVEL_SCALE_FACTOR = 1.2;
-  /*const*/ int NUM_LEVELS = 8;
-  /*const*/ int INIT_FAST = 20;
-  /*const*/ int MIN_FAST = 7;
-  //cv::Ptr<cv::ORB> Frame::ptr_orb_ = cv::ORB::create(2000);
-  ORBextractor::Ptr Frame::ptr_orb_extractor_init_advanced = std::make_shared<ORBextractor>(2*NUM_FEATURES,LEVEL_SCALE_FACTOR,NUM_LEVELS,INIT_FAST,MIN_FAST);
-  ORBextractor::Ptr Frame::ptr_orb_extractor_advanced = std::make_shared<ORBextractor>(NUM_FEATURES,LEVEL_SCALE_FACTOR,NUM_LEVELS,INIT_FAST,MIN_FAST);
-  //ORBmatcher::Ptr Frame::ptr_orb_matcher_init_advanced = std::make_shared<ORBextractor>(0.9, true);
   int Frame::factory_id = 0;
   std::vector<std::pair<size_t, cv::Point3f>> Frame::raw_init_landmarks;
 
   Frame::Frame(ID_t id)
     : id_(id)
   {
-//    ptr_vocal_ = std::make_shared<DBoW3::Vocabulary>();
   }
 
   Frame::Ptr Frame::CreateFrame(const cv::Mat& image,
-                                cv::Mat& image_with_keypoints)
+                                const ORBextractor::Ptr& ptr_orb_extractor,
+                                const std::shared_ptr<DBoW3::Vocabulary>& ptr_vocal)
   {
     // TODO: (aliben.develop@gmail.com)
     auto pFrame = std::make_shared<Frame>(Frame::factory_id);
-    ++Frame::factory_id;
-    pFrame->grid_property_.setup(image);
-    auto num_keypoints = pFrame->extractKeyPoints(image, image_with_keypoints);
     pFrame->image_ = image.clone();
-    AK_LOG_INFO << "FrameID: " << Frame::factory_id;
+    pFrame->grid_property_.setup(image);
+
+    pFrame->ptr_vocal_ = ptr_vocal;
+    auto num_keypoints = pFrame->extractKeyPoints(ptr_orb_extractor);
+    pFrame->computeBOW();
+    AK_LOG_INFO << "FrameID: " << Frame::factory_id++ << "\tfeature: " << num_keypoints;
     return pFrame;
   }
 
-  size_t Frame::extractKeyPoints(const cv::Mat& image,
-                                 cv::Mat& img_with_keypoints)
-  {
-    // TODO: (aliben.develop@gmail.com)
-    // To unify orb extractor call
-      (*Frame::ptr_orb_extractor_init_advanced)(image,
-                                                cv::Mat(),
-                                                this->keypoints_,
-                                                this->descriptors_);
-      auto rows = descriptors_.rows;
-      descriptor_vectors_.clear();
-      descriptor_vectors_.reserve(rows);
-      for(int i = 0;i<rows;++i)
-      {
-        this->descriptor_vectors_.push_back(this->descriptors_.row(i));
-      }
-      //(*Frame::ptr_orb_extractor_advanced)(image,
-      //                                     cv::Mat(),
-      //                                     this->keypoints_,
-      //                                     this->descriptors_);
-    this->assignFeaturePointToGrid();
-    return this->keypoints_.size();
-  }
 
   int Frame::drawKeyPoints(const cv::Mat& img_origin,
                            cv::Mat& img_with_keypoints)
@@ -103,18 +73,6 @@ namespace ak
     }
   }
 
-  bool Frame::getGridPosition(const cv::KeyPoint& kp,
-                              size_t& pos_x,
-                              size_t& pos_y)
-  {
-    pos_x = round((kp.pt.x - this->grid_property_.min_x)*this->grid_property_.grid_width_inv);
-    pos_y = round((kp.pt.y - this->grid_property_.min_y)*this->grid_property_.grid_height_inv);
-    if(pos_x<0 || pos_x>=IMAGE_COLS || pos_y<0 || pos_y>=IMAGE_ROWS)
-    {
-      return false;
-    }
-    return true;
-  }
 
   std::vector<size_t> Frame::getCandidateKeypoints(const float& x,
                                                    const float& y,
@@ -181,8 +139,70 @@ namespace ak
     return candidate_to_match_keypoints;
   }
 
+
+  //==============================GetMethod===============================
+  ID_t Frame::getID()
+  { return id_; }
+
+  const std::vector<cv::KeyPoint>& Frame::getKeyPoints()
+  { return keypoints_;}
+
+  const std::unordered_map<size_t, Landmark::Ptr>& Frame::getLandmarks()
+  { return landmarks_;}
+
+  const DBoW3::FeatureVector& Frame::getFeatureVector()
+  { return feature_vector_;}
+
+  const cv::Mat& Frame::getDescriptors()
+  { return descriptors_;}
+
+  const cv::Mat& Frame::getPose()
+  { return transform_camera_at_world_;}
+
+  const cv::Mat& Frame::getOrigin()
+  { return camera_origin_at_world_;}
+
+  bool Frame::isGood()
+  { return is_good_;}
+  //==============================END GetMethod===============================
+
+  //==============================SetMethod===============================
+  void Frame::setTF(const cv::Mat& T21)
+  {
+    transform_camera_at_world_ = T21.clone();
+    cv::Mat Rcw = transform_camera_at_world_.rowRange(0,3).colRange(0,3);
+    cv::Mat tcw = transform_camera_at_world_.rowRange(0,3).col(3);
+    camera_origin_at_world_ = -Rcw.t() * tcw;
+  }
+
+  void Frame::setReferenceFrame(const Frame::Ptr& ptr_ref_frame)
+  { ptr_reference_frame_ = ptr_ref_frame;}
+  //==============================END SetMethod===============================
+  
+  //==============================ProtectedMethod================================
+  size_t Frame::extractKeyPoints(const ORBextractor::Ptr& ptr_orb_extractor)
+  {
+    // TODO: (aliben.develop@gmail.com)
+    // To unify orb extractor call
+    (*ptr_orb_extractor)(this->image_, cv::Mat(), this->keypoints_, this->descriptors_);
+    auto rows = this->descriptors_.rows;
+    this->descriptor_vectors_.clear();
+    this->descriptor_vectors_.reserve(rows);
+    for(int i = 0;i<rows;++i)
+    {
+      this->descriptor_vectors_.push_back(this->descriptors_.row(i));
+    }
+    this->assignFeaturePointToGrid();
+    return this->keypoints_.size();
+  }
+
   void Frame::insertLandmark(Landmark::Ptr& ptr_landmark, size_t kp_index)
   {
+    if(ptr_landmark == nullptr)
+    {
+      AK_DLOG_FATAL << "Insert a nullptr landmark";
+      assert(ptr_landmark!=nullptr);
+    }
       landmarks_.insert(std::pair<size_t, Landmark::Ptr>(kp_index, ptr_landmark));
       landmarks_index_query_.insert(std::pair<ID_t, size_t>(ptr_landmark->getID(), kp_index));
       //AK_DLOG_INFO << "Landmark ID: " << ptr_landmark->getID() << "\tKP index: " << kp_index;
@@ -201,7 +221,6 @@ namespace ak
       }
       // TODO: (aliben.develop@gmail.com)
       // If landmark has been removed from map
-//      if(landmark)
       auto observation_this_landmark = ptr_landmark->getObservers();
       for(const auto& obs_frame_pair:observation_this_landmark)
       {
@@ -300,4 +319,32 @@ namespace ak
     std::sort(depth_vector.begin(), depth_vector.end());
     return depth_vector[(depth_vector.size() - 1)/section];
   }
+
+  bool Frame::getGridPosition(const cv::KeyPoint& kp,
+                              size_t& pos_x,
+                              size_t& pos_y)
+  {
+    pos_x = round((kp.pt.x - this->grid_property_.min_x)*this->grid_property_.grid_width_inv);
+    pos_y = round((kp.pt.y - this->grid_property_.min_y)*this->grid_property_.grid_height_inv);
+    if(pos_x<0 || pos_x>=IMAGE_COLS || pos_y<0 || pos_y>=IMAGE_ROWS)
+    {
+      return false;
+    }
+    return true;
+  }
+
+  void Frame::computeBOW()
+  {
+    if(bow_vector_.empty() || feature_vector_.empty())
+    {
+      ptr_vocal_->transform(descriptor_vectors_, bow_vector_, feature_vector_, 4);
+      AK_DLOG_INFO << "Initial Bow and feature";
+      AK_DLOG_INFO << "Keypoints size: " << keypoints_.size();
+      AK_DLOG_INFO << "Bow_vector size: " << bow_vector_.size();
+      AK_DLOG_INFO << "feature_vector size: " << feature_vector_.size();
+      return;
+    }
+    AK_DLOG_WARNING << "No initial bow and feature";
+  }
+  //==========================End ProtectedMethod================================
 }

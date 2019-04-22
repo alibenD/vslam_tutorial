@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-01 15:20:49
-  * @last_modified_date: 2019-04-22 17:00:33
+  * @last_modified_date: 2019-04-22 17:22:35
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -17,6 +17,7 @@
 #include <visual_slam/landmark.hh>
 #include <visual_slam/map.hh>
 #include <visual_slam/optimizer.hh>
+#include <mutex>
 
 // Declaration
 namespace ak
@@ -29,6 +30,14 @@ namespace ak
   //  TRACK = 1
   //};
   //using ID_t = unsigned long;
+  enum VO_STATE
+  {
+    NO_IMAGE = -2,
+    NO_INITIALIZATION = -1,
+    INITIALIZED = 0,
+    TRACK = 1
+  };
+
   struct INIT_PARAMETER
   {
     size_t max_iterations_ = 200;
@@ -50,7 +59,7 @@ namespace ak
     INIT_PARAMETER init_params_;
     ORB_PARAMETER orb_params_;
     VO_STATE vo_state_;
-    bool enable_show_ = true;
+    bool enable_show_ = false;
     cv::Mat K_;
   };
 
@@ -72,6 +81,9 @@ namespace ak
       int ShowMatches(const Frame::Ptr& last_frame,
                       const Frame::Ptr& current_frame,
                       const std::string& window_name="Image");
+      int ShowMatches(const std::string& window_name="Image");
+      VO_PARAMETER& getVOParams()
+      { return vo_params_; };
 
     protected:
       //=========== Initialization Functions==============
@@ -134,28 +146,38 @@ namespace ak
       void InitMap();
       //=========== END Initialization Functions==============
 
-      bool trackWithLastKeyFrame();
+      bool trackWithLastKeyFrame(Frame::Ptr& ptr_last_keyframe,
+                                 Frame::Ptr& ptr_new_frame);
 
+      bool trackLocalMap();
     public:
-//      /*static*/ std::vector<Frame::Ptr> frames_vector_;
-//      /*static*/ std::vector<Frame::Ptr> keyframes_vector_;
-//      /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_frames_;
-//      /*static*/ std::unordered_map<Frame::ID_t, Frame::Ptr> hash_keyframes_;
+      ///*static*/ std::vector<Frame::Ptr> frames_vector_;
+      ///*static*/ std::vector<Frame::Ptr> keyframes_vector_;
+      ///*static*/ std::unordered_map<ID_t, Frame::Ptr> hash_frames_;
+      ///*static*/ std::unordered_map<ID_t, Frame::Ptr> hash_keyframes_;
       std::vector<cv::DMatch> best_matches_;
       std::vector<cv::DMatch> best_matches_inliers_;
+      std::mutex show_mutex_;
 
     private:
       /*static*/ Frame::Ptr ptr_initialized_frame_;
       /*static*/ Frame::Ptr ptr_last_frame_;
       /*static*/ Frame::Ptr ptr_current_frame_;
       /*static*/ Frame::Ptr ptr_last_keyframe_;
+      /*static*/ Frame::Ptr ptr_current_keyframe_;
+
       ///*static*/ VO_STATE vo_state;
       /*static*/ std::vector<std::vector<cv::DMatch>> ransec_matched_points_set_;
-      std::shared_ptr<ORBmatcher> ptr_orb_matcher_init_advanced;
+
+
+      ORBextractor::Ptr ptr_orb_extractor_init_{nullptr};
+      ORBextractor::Ptr ptr_orb_extractor_track_{nullptr};
+      std::shared_ptr<ORBmatcher> ptr_orb_matcher_init_{nullptr};
+      //ORBmatcher::Ptr ptr_orb_matcher_init_{nullptr};
       Map::Ptr ptr_map_;
       VO_PARAMETER vo_params_;
-      std::unordered_map<ID_t, Landmark::Ptr> landmarks_map_;
-      std::vector<Landmark::Ptr> landmarks_;
+      //std::unordered_map<ID_t, Landmark::Ptr> landmarks_map_;
+      //std::vector<Landmark::Ptr> landmarks_;
       std::shared_ptr<DBoW3::Vocabulary> ptr_vocal_;
       ///*static*/ Frame::Ptr ptr_reference_frame_;
       Optimizer::Ptr ptr_optimizer_;

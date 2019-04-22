@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-01-21 16:11:21
-  * @last_modified_date: 2019-03-03 14:51:29
+  * @last_modified_date: 2019-04-22 15:54:39
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -15,6 +15,7 @@
 // Header include
 #include <visual_slam/logger_advanced.hh>
 #include <visual_slam/utils/random.hh>
+#include <visual_slam/utils/type.hh>
 #include <memory>
 #include <unordered_map>
 #include <opencv2/opencv.hpp>
@@ -33,19 +34,11 @@ namespace ak
   static cv::Mat last_keyframe_image = cv::Mat();
   const unsigned int IMAGE_COLS = 64;
   const unsigned int IMAGE_ROWS = 48;
-  enum VO_STATE
-  {
-    NO_IMAGE = -2,
-    NO_INITIALIZATION = -1,
-    INITIALIZED = 0,
-    TRACK = 1
-  };
   
   class Frame : public std::enable_shared_from_this<Frame>
   {
     public:
       using Ptr = std::shared_ptr<Frame>;
-      using ID_t = unsigned long;
       friend class FramePair;
       friend class ORBmatcher;
       friend class VisualOdometry;
@@ -53,10 +46,9 @@ namespace ak
       //FRIEND_TEST(FrameTest, getGridPosition);
       //FRIEND_TEST(FrameTest, ComputeH21);
       //FRIEND_TEST(FrameTest, NormalizeKeyPoints);
-      Frame() = default;
+      Frame() = delete;
       Frame(ID_t id);
       ~Frame() = default;
-
       struct GridProperty
       {
         public:
@@ -84,129 +76,83 @@ namespace ak
 
     public:
       //friend class ::ORBmatcher;
-      inline ID_t getID()
-      {
-        return id_;
-      }
-      inline const std::vector<cv::KeyPoint>& getKeyPoints()
-      {
-        return keypoints_;
-      };
-      inline const std::unordered_map<size_t, Landmark::Ptr>& getLandmarks()
-      {
-        return landmarks_;
-      }
-      inline const DBoW3::FeatureVector& getFeatureVector()
-      {
-        return feature_vector_;
-      }
-      inline const cv::Mat& getDescriptors()
-      {
-        return descriptors_;
-      };
-      inline const cv::Mat& getPose()
-      {
-        return transform_camera_at_world_;
-      }
-      inline const cv::Mat& getOrigin()
-      {
-        return camera_origin_at_world_;
-      }
-      inline bool isGood()
-      {
-        return is_good_;
-      }
-      // Set method
-      inline void setTF(const cv::Mat& T21)
-      {
-        transform_camera_at_world_ = T21.clone();
-        cv::Mat Rcw = transform_camera_at_world_.rowRange(0,3).colRange(0,3);
-        cv::Mat tcw = transform_camera_at_world_.rowRange(0,3).col(3);
-        camera_origin_at_world_ = -Rcw.t() * tcw;
-      }
+      ID_t getID();
+      const std::vector<cv::KeyPoint>& getKeyPoints();
+      const std::unordered_map<size_t, Landmark::Ptr>& getLandmarks();
+      const DBoW3::FeatureVector& getFeatureVector();
+      const cv::Mat& getDescriptors();
+      const cv::Mat& getPose();
+      const cv::Mat& getOrigin();
+      bool isGood();
 
-    public:
+      // Set method
+      void setTF(const cv::Mat& T21);
+      void setReferenceFrame(const Frame::Ptr& ptr_ref_frame);
       static Frame::Ptr CreateFrame(const cv::Mat& image,
-                                    cv::Mat& image_with_keypoints = EMPTY_MAT);
+                                    const ORBextractor::Ptr& ptr_orb_extracotr,
+                                    const std::shared_ptr<DBoW3::Vocabulary>& ptr_vocal);
       std::vector<size_t> getCandidateKeypoints(const float& x,
                                                 const float& y,
                                                 const float& radium,
                                                 const int& min_pyramid_level,
                                                 const int& max_pyramid_level);
-      static int factory_id;
-      static std::vector<std::pair<size_t, cv::Point3f>> raw_init_landmarks;
-      cv::Mat image_;
-
-      // keypoints_index, ptr_landmark
-      std::unordered_map<size_t, Landmark::Ptr> landmarks_;
-      // landmark_index, keypoint_index
-      std::unordered_map<ID_t, size_t> landmarks_index_query_;
-
-    public:
-      //static cv::Ptr<cv::ORB> ptr_orb_;
-      static ORBextractor::Ptr ptr_orb_extractor_advanced;
-      static ORBextractor::Ptr ptr_orb_extractor_init_advanced;
 
     protected:
-      size_t extractKeyPoints(const cv::Mat& image,
-                              cv::Mat& image_with_keypoints);
-      int computeDescriptors(const cv::Mat& image);
-      int drawKeyPoints(const cv::Mat& img_origin,
-                        cv::Mat& img_with_keypoints);
       void assignFeaturePointToGrid();
-      bool getGridPosition(const cv::KeyPoint& kp,
-                           size_t& pos_x,
-                           size_t& pos_y);
+      void computeBOW();
       void insertLandmark(Landmark::Ptr& ptr_landmark, size_t kp_index);
-      inline const std::unordered_map<size_t, Landmark::Ptr>& getLandmark()
-      {
-        return landmarks_;
-      }
-      void updateCovision();
       void addCovision(const Frame::Ptr& ptr_covision, unsigned int weight);
+      void updateCovision();
+      size_t extractKeyPoints(const ORBextractor::Ptr& ptr_orb_extracotr);
+      int computeDescriptors(const cv::Mat& image);
+      int drawKeyPoints(const cv::Mat& img_origin, cv::Mat& img_with_keypoints);
       float computeMedianDepth(int section);
-      inline void computeBOW()
-      {
-        if(bow_vector_.empty() || feature_vector_.empty())
-        {
-          ptr_vocal_->transform(descriptor_vectors_, bow_vector_, feature_vector_, 4);
-          AK_DLOG_INFO << "Initial Bow and feature";
-          AK_DLOG_INFO << "Bow_vector size: " << bow_vector_.size();
-          AK_DLOG_INFO << "feature_vector size: " << feature_vector_.size();
-          return;
-        }
-        AK_DLOG_WARNING << "No initial bow and feature";
-      }
+      bool getGridPosition(const cv::KeyPoint& kp, size_t& pos_x, size_t& pos_y);
 
     private:
+      GridProperty grid_property_;
       ID_t id_;
+      cv::Mat image_;
       cv::Mat descriptors_;
+      std::vector<cv::KeyPoint> keypoints_;
+      std::vector<cv::DMatch> best_matches_;
+      std::vector<cv::DMatch> best_matches_inliers_;
+
+      //static ORBextractor::Ptr ptr_orb_extractor_advanced;
+      //static ORBextractor::Ptr ptr_orb_extractor_init_advanced;
+
+      std::unordered_map<Frame::Ptr, unsigned int> covision_sets_;
+      std::vector<Frame::Ptr> covision_frame_ordered_;
+      std::vector<unsigned int> covision_weight_ordered_;
 
       // Loop Closure
-      std::shared_ptr<DBoW3::Vocabulary> ptr_vocal_;
+      std::shared_ptr<DBoW3::Vocabulary> ptr_vocal_{nullptr};
       std::vector<cv::Mat> descriptor_vectors_;
       DBoW3::FeatureVector feature_vector_;
       DBoW3::BowVector bow_vector_;
 
-      std::vector<cv::KeyPoint> keypoints_;
-      std::vector<cv::DMatch> best_matches_;
-      std::vector<cv::DMatch> best_matches_inliers_;
-      std::unordered_map<Frame::Ptr, unsigned int> covision_sets_;
-      std::vector<Frame::Ptr> covision_frame_ordered_;
-      std::vector<unsigned int> covision_weight_ordered_;
       std::vector<size_t> keypoints_grid_[IMAGE_COLS][IMAGE_ROWS];
-      GridProperty grid_property_;
       // Pose opencv
       cv::Mat transform_camera_at_world_;  // TF21
+      cv::Mat T21_estimated_;
+      cv::Mat T21_local_BA_;
+      cv::Mat T21_global_BA_;
+      cv::Mat T21_before_global_BA_;
       cv::Mat camera_origin_at_world_;
       cv::Mat transform_optimized_;
       bool init_covision_{false};
       bool is_good_{true};
       unsigned int num_ba_global_{0};
+      Frame::Ptr ptr_reference_frame_{nullptr};
+
+      static std::vector<std::pair<size_t, cv::Point3f>> raw_init_landmarks;
+
+      // keypoints_index, ptr_landmark
+      std::unordered_map<size_t, Landmark::Ptr> landmarks_;
+      // landmark_index, keypoint_index
+      std::unordered_map<ID_t, size_t> landmarks_index_query_;
+      static int factory_id;
 //      bool is_drop_{false};
-      //cv::Mat translation_;
-      //cv::Mat rotation_;
-      // Pose SE3
   };
 }
 #endif // __FRAME_HH__
