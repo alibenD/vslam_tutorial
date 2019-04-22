@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-02 13:14:15
-  * @last_modified_date: 2019-03-21 17:49:39
+  * @last_modified_date: 2019-04-22 17:01:21
   * @brief: TODO
   * @details: TODO
   */
@@ -38,9 +38,9 @@ int main(int argc, char** argv)
     //auto img = cv::imread(img_path);
     cv::Mat img_current = cv::imread(img_path, cv::IMREAD_GRAYSCALE);
     ptr_vo->newFrame(img_current);
-    ptr_vo->ShowMatches(name_window);
-//    cv::imshow(name_window, img_with_kp);
-//    cv::waitKey(30);
+    //ptr_vo->ShowMatches(name_window);
+    //cv::imshow(name_window, img_with_kp);
+    //cv::waitKey(30);
   }
   return 0;
 }

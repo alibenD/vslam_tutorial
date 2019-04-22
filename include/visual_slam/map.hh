@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-03 11:06:28
-  * @last_modified_date: 2019-04-22 12:50:10
+  * @last_modified_date: 2019-04-22 16:59:56
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -15,6 +15,7 @@
 // Header include
 #include <visual_slam/frame.hh>
 #include <visual_slam/landmark.hh>
+#include <visual_slam/utils/type.hh>
 
 // Declaration
 namespace ak
