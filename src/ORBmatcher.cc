@@ -138,6 +138,25 @@ namespace ak
   //}
 
 
+  bool ORBmatcher::CheckDistEpipolarLine(const cv::KeyPoint &kp1,const cv::KeyPoint &kp2,const cv::Mat &F12,const Frame::Ptr& pKF2)
+  {
+      // Epipolar line in second image l = x1'F12 = [a b c]
+      const float a = kp1.pt.x*F12.at<float>(0,0)+kp1.pt.y*F12.at<float>(1,0)+F12.at<float>(2,0);
+      const float b = kp1.pt.x*F12.at<float>(0,1)+kp1.pt.y*F12.at<float>(1,1)+F12.at<float>(2,1);
+      const float c = kp1.pt.x*F12.at<float>(0,2)+kp1.pt.y*F12.at<float>(1,2)+F12.at<float>(2,2);
+
+      const float num = a*kp2.pt.x+b*kp2.pt.y+c;
+
+      const float den = a*a+b*b;
+
+      if(den==0)
+          return false;
+
+      const float dsqr = num*num/den;
+
+      return dsqr<3.84*(std::pow(Frame::level_scale_factor, kp2.octave));
+  }
+
   //bool ORBmatcher::CheckDistEpipolarLine(const cv::KeyPoint &kp1,const cv::KeyPoint &kp2,const cv::Mat &F12,const KeyFrame* pKF2)
   //{
   //    // Epipolar line in second image l = x1'F12 = [a b c]
@@ -342,7 +361,7 @@ namespace ak
           }
           else
           {
-            if(landmarks_reference[realIdxKF]->isGood() == false)
+            if(landmarks_reference[realIdxKF]->isAvailable() == false)
             {
               continue;
             }
@@ -731,7 +750,7 @@ namespace ak
       std::vector<size_t> vIndices2 = ptr_current_frame->getCandidateKeypoints(kp1.pt.x, kp1.pt.y, windowSize,level1,level1);
       //AK_DLOG_WARNING << "Optx: " << kp1.pt.x << "," << kp.pt.y;
       //AK_DLOG_WARNING << "Nptx: " << kp
-      AK_DLOG_WARNING << "Candidate size: " << vIndices2.size();
+      //AK_DLOG_WARNING << "Candidate size: " << vIndices2.size();
 
       if(vIndices2.empty())
         continue;
@@ -825,13 +844,17 @@ namespace ak
     }
 
     ptr_initialized_frame->best_matches_.clear();
+    ptr_current_frame->best_matches_.clear();
     //Update prev matched
     for(size_t i1=0, iend1=vnMatches12.size(); i1<iend1; i1++)
     {
       if(vnMatches12[i1]>=0)
       {
         //vbPrevMatched[i1]=F2.mvKeysUn[vnMatches12[i1]].pt;
+        //ptr_initialized_frame->best_matches_.push_back(cv::DMatch(i1, vnMatches12[i1], vMatchedDistance[vnMatches12[i1]]));
+        // i1 is queryID(last), vnMatches12[i1] is trainID(current)
         ptr_initialized_frame->best_matches_.push_back(cv::DMatch(i1, vnMatches12[i1], vMatchedDistance[vnMatches12[i1]]));
+        ptr_current_frame->best_matches_.push_back(cv::DMatch(i1, vnMatches12[i1], vMatchedDistance[vnMatches12[i1]]));
         //AK_DLOG_WARNING << "Dist: " << vMatchedDistance[vnMatches12[i1]];
       }
     }
@@ -974,6 +997,150 @@ namespace ak
   //
   //    return nmatches;
   //}
+
+  int ORBmatcher::SearchForTriangulation(const Frame::Ptr& ptr_reference_frame,
+                                         const Frame::Ptr& ptr_current_frame,
+                                         cv::Mat F12,
+                                         vector<cv::DMatch> &vMatchedPairs,
+                                         const bool bOnlyStereo)
+  {
+    const DBoW3::FeatureVector &vFeatVec1 = ptr_reference_frame->getFeatureVector();
+    const DBoW3::FeatureVector &vFeatVec2 = ptr_current_frame->getFeatureVector();
+    //Compute epipole in second image
+    cv::Mat Cw = ptr_reference_frame->getOrigin();
+    cv::Mat R2w = ptr_current_frame->getRotation();
+    cv::Mat t2w = ptr_current_frame->getTranslation();
+    cv::Mat C2 = R2w*Cw+t2w;
+    const float invz = 1.0f/C2.at<float>(2);
+    // Projection of Origin with current in previous frame
+    const float ex = Frame::K.at<float>(0,0)*C2.at<float>(0)*invz+Frame::K.at<float>(0,2);
+    const float ey = Frame::K.at<float>(1,1)*C2.at<float>(1)*invz+Frame::K.at<float>(1,2);
+    // Find matches between not tracked keypoints
+    // Matching speed-up by ORB Vocabulary
+    // Compare only ORB that share the same node
+    int nmatches=0;
+    auto kp_reference = ptr_reference_frame->getKeyPoints();
+    auto kp_current = ptr_current_frame->getKeyPoints();
+    vector<bool> vbMatched2(kp_current.size(),false);
+    vector<int> vMatches12(kp_reference.size(),-1);
+    vector<int> rotation_histogram[HISTO_LENGTH];
+    for(int i=0;i<HISTO_LENGTH;i++)
+      rotation_histogram[i].reserve(500);
+    const float factor = 1.0f/HISTO_LENGTH;
+    DBoW3::FeatureVector::const_iterator f1it = vFeatVec1.begin();
+    DBoW3::FeatureVector::const_iterator f2it = vFeatVec2.begin();
+    DBoW3::FeatureVector::const_iterator f1end = vFeatVec1.end();
+    DBoW3::FeatureVector::const_iterator f2end = vFeatVec2.end();
+
+    auto landmarks_reference = ptr_reference_frame->getLandmarks();
+    auto landmarks_current = ptr_current_frame->getLandmarks();
+    while(f1it!=f1end && f2it!=f2end)
+    {
+      if(f1it->first == f2it->first)
+      {
+        const vector<unsigned int> vIndicesKF = f1it->second;
+        const vector<unsigned int> vIndicesF = f2it->second;
+        for(size_t i1=0; i1<vIndicesKF.size(); i1++)
+        {
+          auto idx1 = vIndicesF[i1];
+          //MapPoint* pMP1 = ptr_reference_frame->GetMapPoint(idx1);
+          auto ptr_landmark_ref = landmarks_reference[idx1];
+          // If there is already a MapPoint skip
+          if(landmarks_reference.count(idx1) == 0)
+          {
+            continue;
+          }
+          const cv::KeyPoint &kp1 = kp_reference[idx1];
+          const cv::Mat &d1 = ptr_reference_frame->getDescriptors().row(idx1);
+          int bestDist = TH_LOW;
+          int bestIdx2 = -1;
+          for(size_t i2=0; i2<vIndicesF.size(); i2++)
+          {
+            size_t idx2 = vIndicesF[i2];
+            //MapPoint* pMP2 = ptr_current_frame->GetMapPoint(idx2);
+            // If we have already matched or there is a MapPoint skip
+            if(landmarks_current.count(idx2) != 0)
+            {
+              continue;
+            }
+            auto ptr_landmark_cur = landmarks_current[idx2];
+            const cv::Mat &d2 = ptr_current_frame->getDescriptors().row(idx2);
+            const int dist = DescriptorDistance(d1,d2);
+            if(dist>TH_LOW || dist>bestDist)
+              continue;
+            const cv::KeyPoint &kp2 = kp_current[idx2];
+            // Steoro???
+            const float distex = ex-kp2.pt.x;
+            const float distey = ey-kp2.pt.y;
+            if(distex*distex+distey*distey<100*std::pow(Frame::level_scale_factor, kp2.octave))
+            {
+              continue;
+            }
+            if(CheckDistEpipolarLine(kp1,kp2,F12,ptr_current_frame))
+            {
+              bestIdx2 = idx2;
+              bestDist = dist;
+            }
+          }
+          if(bestIdx2>=0)
+          {
+            const cv::KeyPoint &kp2 = kp_current[bestIdx2];
+            vMatches12[idx1]=bestIdx2;
+            nmatches++;
+            if(mbCheckOrientation)
+            {
+              float rot = kp1.angle-kp2.angle;
+              if(rot<0.0)
+                rot+=360.0f;
+              int bin = round(rot*factor);
+              if(bin==HISTO_LENGTH)
+                bin=0;
+              assert(bin>=0 && bin<HISTO_LENGTH);
+              rotation_histogram[bin].push_back(idx1);
+            }
+          }
+        }
+        f1it++;
+        f2it++;
+      }
+      else if(f1it->first < f2it->first)
+      {
+        f1it = vFeatVec1.lower_bound(f2it->first);
+      }
+      else
+      {
+        f2it = vFeatVec2.lower_bound(f1it->first);
+      }
+    }
+    if(mbCheckOrientation)
+    {
+      int ind1=-1;
+      int ind2=-1;
+      int ind3=-1;
+      ComputeThreeMaxima(rotation_histogram,HISTO_LENGTH,ind1,ind2,ind3);
+      for(int i=0; i<HISTO_LENGTH; i++)
+      {
+        if(i==ind1 || i==ind2 || i==ind3)
+          continue;
+        for(size_t j=0, jend=rotation_histogram[i].size(); j<jend; j++)
+        {
+          vMatches12[rotation_histogram[i][j]]=-1;
+          nmatches--;
+        }
+      }
+    }
+    vMatchedPairs.clear();
+    vMatchedPairs.reserve(nmatches);
+    for(size_t i=0, iend=vMatches12.size(); i<iend; i++)
+    {
+      if(vMatches12[i]>=0)
+      {
+        vMatchedPairs.push_back(cv::DMatch(i, vMatches12[i], 10));
+      }
+      //vMatchedPairs.push_back(make_pair(i,vMatches12[i]));
+    }
+    return nmatches;
+  }
 
   //int ORBmatcher::SearchForTriangulation(KeyFrame *pKF1, KeyFrame *pKF2, cv::Mat F12,
   //                                       vector<pair<size_t, size_t> > &vMatchedPairs, const bool bOnlyStereo)
@@ -1144,156 +1311,313 @@ namespace ak
   //}
 
   //int ORBmatcher::Fuse(KeyFrame *pKF, const vector<MapPoint *> &vpMapPoints, const float th)
-  //{
-  //    cv::Mat Rcw = pKF->GetRotation();
-  //    cv::Mat tcw = pKF->GetTranslation();
-  //
-  //    const float &fx = pKF->fx;
-  //    const float &fy = pKF->fy;
-  //    const float &cx = pKF->cx;
-  //    const float &cy = pKF->cy;
-  //    const float &bf = pKF->mbf;
-  //
-  //    cv::Mat Ow = pKF->GetCameraCenter();
-  //
-  //    int nFused=0;
-  //
-  //    const int nMPs = vpMapPoints.size();
-  //
-  //    for(int i=0; i<nMPs; i++)
-  //    {
-  //        MapPoint* pMP = vpMapPoints[i];
-  //
-  //        if(!pMP)
-  //            continue;
-  //
-  //        if(pMP->isBad() || pMP->IsInKeyFrame(pKF))
-  //            continue;
-  //
-  //        cv::Mat p3Dw = pMP->GetWorldPos();
-  //        cv::Mat p3Dc = Rcw*p3Dw + tcw;
-  //
-  //        // Depth must be positive
-  //        if(p3Dc.at<float>(2)<0.0f)
-  //            continue;
-  //
-  //        const float invz = 1/p3Dc.at<float>(2);
-  //        const float x = p3Dc.at<float>(0)*invz;
-  //        const float y = p3Dc.at<float>(1)*invz;
-  //
-  //        const float u = fx*x+cx;
-  //        const float v = fy*y+cy;
-  //
-  //        // Point must be inside the image
-  //        if(!pKF->IsInImage(u,v))
-  //            continue;
-  //
-  //        const float ur = u-bf*invz;
-  //
-  //        const float maxDistance = pMP->GetMaxDistanceInvariance();
-  //        const float minDistance = pMP->GetMinDistanceInvariance();
-  //        cv::Mat PO = p3Dw-Ow;
-  //        const float dist3D = cv::norm(PO);
-  //
-  //        // Depth must be inside the scale pyramid of the image
-  //        if(dist3D<minDistance || dist3D>maxDistance )
-  //            continue;
-  //
-  //        // Viewing angle must be less than 60 deg
-  //        cv::Mat Pn = pMP->GetNormal();
-  //
-  //        if(PO.dot(Pn)<0.5*dist3D)
-  //            continue;
-  //
-  //        int nPredictedLevel = pMP->PredictScale(dist3D,pKF);
-  //
-  //        // Search in a radius
-  //        const float radius = th*pKF->mvScaleFactors[nPredictedLevel];
-  //
-  //        const vector<size_t> vIndices = pKF->GetFeaturesInArea(u,v,radius);
-  //
-  //        if(vIndices.empty())
-  //            continue;
-  //
-  //        // Match to the most similar keypoint in the radius
-  //
-  //        const cv::Mat dMP = pMP->GetDescriptor();
-  //
-  //        int bestDist = 256;
-  //        int bestIdx = -1;
-  //        for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
-  //        {
-  //            const size_t idx = *vit;
-  //
-  //            const cv::KeyPoint &kp = pKF->mvKeysUn[idx];
-  //
-  //            const int &kpLevel= kp.octave;
-  //
-  //            if(kpLevel<nPredictedLevel-1 || kpLevel>nPredictedLevel)
-  //                continue;
-  //
-  //            if(pKF->mvuRight[idx]>=0)
-  //            {
-  //                // Check reprojection error in stereo
-  //                const float &kpx = kp.pt.x;
-  //                const float &kpy = kp.pt.y;
-  //                const float &kpr = pKF->mvuRight[idx];
-  //                const float ex = u-kpx;
-  //                const float ey = v-kpy;
-  //                const float er = ur-kpr;
-  //                const float e2 = ex*ex+ey*ey+er*er;
-  //
-  //                if(e2*pKF->mvInvLevelSigma2[kpLevel]>7.8)
-  //                    continue;
-  //            }
-  //            else
-  //            {
-  //                const float &kpx = kp.pt.x;
-  //                const float &kpy = kp.pt.y;
-  //                const float ex = u-kpx;
-  //                const float ey = v-kpy;
-  //                const float e2 = ex*ex+ey*ey;
-  //
-  //                if(e2*pKF->mvInvLevelSigma2[kpLevel]>5.99)
-  //                    continue;
-  //            }
-  //
-  //            const cv::Mat &dKF = pKF->mDescriptors.row(idx);
-  //
-  //            const int dist = DescriptorDistance(dMP,dKF);
-  //
-  //            if(dist<bestDist)
-  //            {
-  //                bestDist = dist;
-  //                bestIdx = idx;
-  //            }
-  //        }
-  //
-  //        // If there is already a MapPoint replace otherwise add new measurement
-  //        if(bestDist<=TH_LOW)
-  //        {
-  //            MapPoint* pMPinKF = pKF->GetMapPoint(bestIdx);
-  //            if(pMPinKF)
-  //            {
-  //                if(!pMPinKF->isBad())
-  //                {
-  //                    if(pMPinKF->Observations()>pMP->Observations())
-  //                        pMP->Replace(pMPinKF);
-  //                    else
-  //                        pMPinKF->Replace(pMP);
-  //                }
-  //            }
-  //            else
-  //            {
-  //                pMP->AddObservation(pKF,bestIdx);
-  //                pKF->AddMapPoint(pMP,bestIdx);
-  //            }
-  //            nFused++;
-  //        }
-  //    }
-  //
-  //    return nFused;
-  //}
+  //  //{
+  //  //    cv::Mat Rcw = pKF->GetRotation();
+  //  //    cv::Mat tcw = pKF->GetTranslation();
+  //  //
+  //  //    const float &fx = pKF->fx;
+  //  //    const float &fy = pKF->fy;
+  //  //    const float &cx = pKF->cx;
+  //  //    const float &cy = pKF->cy;
+  //  //    const float &bf = pKF->mbf;
+  //  //
+  //  //    cv::Mat Ow = pKF->GetCameraCenter();
+  //  //
+  //  //    int nFused=0;
+  //  //
+  //  //    const int nMPs = vpMapPoints.size();
+  //  //
+  //  //    for(int i=0; i<nMPs; i++)
+  //  //    {
+  //  //        MapPoint* pMP = vpMapPoints[i];
+  //  //
+  //  //        if(!pMP)
+  //  //            continue;
+  //  //
+  //  //        if(pMP->isBad() || pMP->IsInKeyFrame(pKF))
+  //  //            continue;
+  //  //
+  //  //        cv::Mat p3Dw = pMP->GetWorldPos();
+  //  //        cv::Mat p3Dc = Rcw*p3Dw + tcw;
+  //  //
+  //  //        // Depth must be positive
+  //  //        if(p3Dc.at<float>(2)<0.0f)
+  //  //            continue;
+  //  //
+  //  //        const float invz = 1/p3Dc.at<float>(2);
+  //  //        const float x = p3Dc.at<float>(0)*invz;
+  //  //        const float y = p3Dc.at<float>(1)*invz;
+  //  //
+  //  //        const float u = fx*x+cx;
+  //  //        const float v = fy*y+cy;
+  //  //
+  //  //        // Point must be inside the image
+  //  //        if(!pKF->IsInImage(u,v))
+  //  //            continue;
+  //  //
+  //  //        const float ur = u-bf*invz;
+  //  //
+  //  //        const float maxDistance = pMP->GetMaxDistanceInvariance();
+  //  //        const float minDistance = pMP->GetMinDistanceInvariance();
+  //  //        cv::Mat PO = p3Dw-Ow;
+  //  //        const float dist3D = cv::norm(PO);
+  //  //
+  //  //        // Depth must be inside the scale pyramid of the image
+  //  //        if(dist3D<minDistance || dist3D>maxDistance )
+  //  //            continue;
+  //  //
+  //  //        // Viewing angle must be less than 60 deg
+  //  //        cv::Mat Pn = pMP->GetNormal();
+  //  //
+  //  //        if(PO.dot(Pn)<0.5*dist3D)
+  //  //            continue;
+  //  //
+  //  //        int nPredictedLevel = pMP->PredictScale(dist3D,pKF);
+  //  //
+  //  //        // Search in a radius
+  //  //        const float radius = th*pKF->mvScaleFactors[nPredictedLevel];
+  //  //
+  //  //        const vector<size_t> vIndices = pKF->GetFeaturesInArea(u,v,radius);
+  //  //
+  //  //        if(vIndices.empty())
+  //  //            continue;
+  //  //
+  //  //        // Match to the most similar keypoint in the radius
+  //  //
+  //  //        const cv::Mat dMP = pMP->GetDescriptor();
+  //  //
+  //  //        int bestDist = 256;
+  //  //        int bestIdx = -1;
+  //  //        for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
+  //  //        {
+  //  //            const size_t idx = *vit;
+  //  //
+  //  //            const cv::KeyPoint &kp = pKF->mvKeysUn[idx];
+  //  //
+  //  //            const int &kpLevel= kp.octave;
+  //  //
+  //  //            if(kpLevel<nPredictedLevel-1 || kpLevel>nPredictedLevel)
+  //  //                continue;
+  //  //
+  //  //            if(pKF->mvuRight[idx]>=0)
+  //  //            {
+  //  //                // Check reprojection error in stereo
+  //  //                const float &kpx = kp.pt.x;
+  //  //                const float &kpy = kp.pt.y;
+  //  //                const float &kpr = pKF->mvuRight[idx];
+  //  //                const float ex = u-kpx;
+  //  //                const float ey = v-kpy;
+  //  //                const float er = ur-kpr;
+  //  //                const float e2 = ex*ex+ey*ey+er*er;
+  //  //
+  //  //                if(e2*pKF->mvInvLevelSigma2[kpLevel]>7.8)
+  //  //                    continue;
+  //  //            }
+  //  //            else
+  //  //            {
+  //  //                const float &kpx = kp.pt.x;
+  //  //                const float &kpy = kp.pt.y;
+  //  //                const float ex = u-kpx;
+  //  //                const float ey = v-kpy;
+  //  //                const float e2 = ex*ex+ey*ey;
+  //  //
+  //  //                if(e2*pKF->mvInvLevelSigma2[kpLevel]>5.99)
+  //  //                    continue;
+  //  //            }
+  //  //
+  //  //            const cv::Mat &dKF = pKF->mDescriptors.row(idx);
+  //  //
+  //  //            const int dist = DescriptorDistance(dMP,dKF);
+  //  //
+  //  //            if(dist<bestDist)
+  //  //            {
+  //  //                bestDist = dist;
+  //  //                bestIdx = idx;
+  //  //            }
+  //  //        }
+  //  //
+  //  //        // If there is already a MapPoint replace otherwise add new measurement
+  //  //        if(bestDist<=TH_LOW)
+  //  //        {
+  //  //            MapPoint* pMPinKF = pKF->GetMapPoint(bestIdx);
+  //  //            if(pMPinKF)
+  //  //            {
+  //  //                if(!pMPinKF->isBad())
+  //  //                {
+  //  //                    if(pMPinKF->Observations()>pMP->Observations())
+  //  //                        pMP->Replace(pMPinKF);
+  //  //                    else
+  //  //                        pMPinKF->Replace(pMP);
+  //  //                }
+  //  //            }
+  //  //            else
+  //  //            {
+  //  //                pMP->AddObservation(pKF,bestIdx);
+  //  //                pKF->AddMapPoint(pMP,bestIdx);
+  //  //            }
+  //  //            nFused++;
+  //  //        }
+  //  //    }
+  //  //
+  //  //    return nFused;
+  //  //}
+
+  int ORBmatcher::Fuse(const Frame::Ptr& pKF,
+                       const vector<Landmark::Ptr>& vpMapPoints,
+                       const float th)
+    {
+        cv::Mat Rcw = pKF->getRotation();
+        cv::Mat tcw = pKF->getTranslation();
+
+        const float &fx = Frame::K.at<float>(0,0);
+        const float &fy = Frame::K.at<float>(1,1);
+        const float &cx = Frame::K.at<float>(0,2);
+        const float &cy = Frame::K.at<float>(1,2);
+//        const float &bf = pKF->mbf;
+
+        cv::Mat Ow = pKF->getOrigin();
+
+        int nFused=0;
+
+        const int nMPs = vpMapPoints.size();
+
+        for(int i=0; i<nMPs; i++)
+        {
+            auto pMP = vpMapPoints[i];
+
+            if(!pMP)
+                continue;
+
+            if(pMP->isAvailable() || pMP->isInFrame(pKF))
+                continue;
+
+            auto pos = pMP->getPosition();
+            cv::Mat p3Dw = cv::Mat(pos);
+            cv::Mat p3Dc = Rcw*p3Dw + tcw;
+
+            // Depth must be positive
+            if(p3Dc.at<float>(2)<0.0f)
+                continue;
+
+            const float invz = 1/p3Dc.at<float>(2);
+            const float x = p3Dc.at<float>(0)*invz;
+            const float y = p3Dc.at<float>(1)*invz;
+
+            const float u = fx*x+cx;
+            const float v = fy*y+cy;
+
+            // Point must be inside the image
+            if(!pKF->isInImage(u,v))
+                continue;
+
+//            const float ur = u-bf*invz;
+
+            const float maxDistance = pMP->getMaxDistanceInvariance();
+            const float minDistance = pMP->getMinDistanceInvariance();
+            cv::Mat PO = p3Dw-Ow;
+            const float dist3D = cv::norm(PO);
+
+            // Depth must be inside the scale pyramid of the image
+            if(dist3D<minDistance || dist3D>maxDistance )
+                continue;
+
+            // Viewing angle must be less than 60 deg
+            cv::Mat Pn = pMP->getNormPos();
+
+            if(PO.dot(Pn)<0.5*dist3D)
+                continue;
+
+            int nPredictedLevel = pMP->predictScale(dist3D);
+
+            // Search in a radius
+            const float radius = th*std::pow(Frame::level_scale_factor, nPredictedLevel);
+
+            const vector<size_t> vIndices = pKF->getCandidateKeypoints(u,v,radius);
+
+            if(vIndices.empty())
+                continue;
+
+            // Match to the most similar keypoint in the radius
+
+            const cv::Mat dMP = pMP->getDescriptor();
+
+            int bestDist = 256;
+            int bestIdx = -1;
+            for(vector<size_t>::const_iterator vit=vIndices.begin(), vend=vIndices.end(); vit!=vend; vit++)
+            {
+                const size_t idx = *vit;
+
+                const cv::KeyPoint &kp = pKF->getKeyPoints()[idx];
+
+                const int &kpLevel= kp.octave;
+
+                if(kpLevel<nPredictedLevel-1 || kpLevel>nPredictedLevel)
+                    continue;
+
+//                if(pKF->mvuRight[idx]>=0)
+//                {
+//                    // Check reprojection error in stereo
+//                    const float &kpx = kp.pt.x;
+//                    const float &kpy = kp.pt.y;
+//                    const float &kpr = pKF->mvuRight[idx];
+//                    const float ex = u-kpx;
+//                    const float ey = v-kpy;
+//                    const float er = ur-kpr;
+//                    const float e2 = ex*ex+ey*ey+er*er;
+//
+//                    if(e2*pKF->mvInvLevelSigma2[kpLevel]>7.8)
+//                        continue;
+//                }
+//                else
+//                {
+                    const float &kpx = kp.pt.x;
+                    const float &kpy = kp.pt.y;
+                    const float ex = u-kpx;
+                    const float ey = v-kpy;
+                    const float e2 = ex*ex+ey*ey;
+
+//                    if(e2*pKF->mvInvLevelSigma2[kpLevel]>5.99)
+//                        continue;
+//                }
+
+
+                const cv::Mat &dKF = pKF->getDescriptors().row(idx);
+
+                const int dist = DescriptorDistance(dMP,dKF);
+
+                if(dist<bestDist)
+                {
+                    bestDist = dist;
+                    bestIdx = idx;
+                }
+            }
+
+            // If there is already a MapPoint replace otherwise add new measurement
+            if(bestDist<=TH_LOW)
+            {
+                auto landmarks = pKF->getLandmarks();
+                auto pMPinKF = landmarks[size_t(bestIdx)];
+                if(pMPinKF)
+                {
+                    if(!pMPinKF->isAvailable())
+                    {
+                        if(pMPinKF->getObservationTimes()>pMP->getObservationTimes())
+                            pMP->replace(pMPinKF);
+                        else
+                            pMPinKF->replace(pMP);
+                    }
+                }
+                else
+                {
+                    pMP->addObserver(pKF,bestIdx);
+                    pKF->insertLandmark(pMP,bestIdx);
+                }
+                nFused++;
+            }
+        }
+
+        return nFused;
+    }
 
   //int ORBmatcher::Fuse(KeyFrame *pKF, cv::Mat Scw, const vector<MapPoint *> &vpPoints, float th, vector<MapPoint *> &vpReplacePoint)
   //{

@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-02 13:14:15
-  * @last_modified_date: 2019-04-22 17:01:21
+  * @last_modified_date: 2019-04-22 18:36:08
   * @brief: TODO
   * @details: TODO
   */
@@ -22,7 +22,7 @@ int main(int argc, char** argv)
 {
   LOG_INIT_DEFAULT;
   std::string fold_path("/Users/aliben/project/data/slam_data/dataset/sequences/00/");
-  std::string vocab("../data/ORBvoc.txt");
+  std::string vocab("../data/ORBvoc.bin");
   std::vector<std::string> img_lists;
   auto num_img = ReadFileList(fold_path+"img_list.txt", img_lists);
   AK_LOG(INFO) << "Count: " << num_img << "\tFrom: " << fold_path << std::endl;
@@ -38,7 +38,7 @@ int main(int argc, char** argv)
     //auto img = cv::imread(img_path);
     cv::Mat img_current = cv::imread(img_path, cv::IMREAD_GRAYSCALE);
     ptr_vo->newFrame(img_current);
-    //ptr_vo->ShowMatches(name_window);
+    ptr_vo->ShowMatches(name_window);
     //cv::imshow(name_window, img_with_kp);
     //cv::waitKey(30);
   }

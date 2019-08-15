@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-02 23:57:11
-  * @last_modified_date: 2019-03-12 15:14:49
+  * @last_modified_date: 2019-04-24 09:19:45
   * @brief: TODO
   * @details: TODO
   */
@@ -17,7 +17,7 @@
 //CODE
 namespace ak
 {
-  Landmark::ID_t Landmark::factory_id = 0;
+  ID_t Landmark::factory_id = 0;
 
   Landmark::Landmark(ID_t id, float x, float y, float z)
     : Landmark(id, cv::Point3f(x, y, z))
@@ -27,6 +27,8 @@ namespace ak
 
   Landmark::Landmark(ID_t id, const cv::Point3f& position)
     : id_(id),
+      fuse_for_id_(0),
+      localBA_for_id_(0),
       position_at_world_(position)
   {
 
@@ -39,6 +41,9 @@ namespace ak
     : id_(id),
       position_at_world_(position),
       position_normal_at_camera_(position/cv::norm(position)),
+      num_observation_times_(0),
+      num_visible_(0),
+      num_found_(0),
       first_frame_pair_(ptr_last_frame, ptr_current_frame)
   {
 
@@ -64,7 +69,6 @@ namespace ak
       AK_DLOG_WARNING << "Frame: " << ptr_observer_frame->getID() << " has been an observer for keypoint " << kp_idx;
       return;
     }
-    //AK_LOG_WARNING << "Frame: " << ptr_observer_frame->getID() << " added for keypoint " << kp_idx;
 
     observers_.insert(std::pair<Frame::Ptr, size_t>(ptr_observer_frame, kp_idx));
     ++num_observation_times_;
@@ -82,6 +86,7 @@ namespace ak
     {
       return;
     }
+    descriptors_all_observed_.clear();
     descriptors_all_observed_.reserve(observers_.size());
     for(const auto& observer : observers_)
     {
@@ -152,5 +157,74 @@ namespace ak
     max_distance_ = property_.distance_ * property_.level_factor_;
     min_distance_ = max_distance_/std::pow(property_.level_factor_, property_.num_level_ - 1);
     obs_normal_ = obs_normal / size_obs;
+  }
+
+  bool Landmark::isInFrame(const std::shared_ptr<ak::Frame>& ptr_frame)
+  {
+    if(observers_.count(ptr_frame) > 0)
+    {
+      return true;
+    }
+    else
+    {
+      return false;
+    }
+  }
+
+  int Landmark::predictScale(const float& current_dist)
+  {
+    float ratio = max_distance_/current_dist;
+    int num_scale = ceil(std::log(ratio)/Frame::level_scale_factor_log);
+    if(num_scale<0)
+    {
+      num_scale = 0;
+    }
+    else if(num_scale>=8) // 8 is the level of pyramid
+    {
+      num_scale = 8-1;
+    }
+    return num_scale;
+  }
+
+  void Landmark::replace(const Landmark::Ptr& ptr_new_landmark)
+  {
+    if(ptr_new_landmark->getID() == this->getID())
+    {
+      return;
+    }
+    Count_t num_visible, num_found;
+    auto observers = observers_;
+
+    observers_.clear();
+    is_available_ = false;
+    num_visible = num_visible_;
+    num_found = num_found_;
+    ptr_replace_landmark_ = ptr_new_landmark;
+
+    for(auto& obs:observers)
+    {
+      auto ptr_frame = obs.first;
+      if(ptr_new_landmark->isInFrame(ptr_frame) == false)
+      {
+        ptr_frame->replaceLandmark(ptr_new_landmark, obs.second);
+        ptr_new_landmark->addObserver(ptr_frame, obs.second);
+      }
+      else
+      {
+        ptr_frame->dropLandmark(obs.second);
+      }
+    }
+    ptr_new_landmark->increaseFound(num_found);
+    ptr_new_landmark->increaseVisible(num_visible);
+  }
+
+  void Landmark::increaseFound(ak::Landmark::Count_t num_found)
+  {
+    num_found_+=num_found;
+  }
+
+  void Landmark::increaseVisible(ak::Landmark::Count_t num_visible)
+  {
+    num_visible_+=num_visible;
   }
 }

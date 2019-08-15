@@ -7,7 +7,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-01 15:20:49
-  * @last_modified_date: 2019-04-22 17:22:35
+  * @last_modified_date: 2019-04-24 14:57:54
   * @brief: TODO
   * @details: TODO
   *-----------------------------------------------*/
@@ -78,6 +78,7 @@ namespace ak
                         const Frame::Ptr& ptr_current_frame,
                         cv::Mat& Rcw,
                         cv::Mat& tcw);
+      void resetVO();
       int ShowMatches(const Frame::Ptr& last_frame,
                       const Frame::Ptr& current_frame,
                       const std::string& window_name="Image");
@@ -109,7 +110,7 @@ namespace ak
                                       cv::Mat& K,
                                       cv::Mat& R21,
                                       cv::Mat& t21,
-                                      std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
+                                      std::vector<std::pair<cv::DMatch, cv::Point3f>>& raw_init_landmarks,
                                       float min_parallax,
                                       int min_triangulated);
       bool ReconstructFromFund(std::vector<cv::DMatch>& matched_inliers,
@@ -117,7 +118,7 @@ namespace ak
                                cv::Mat& K,
                                cv::Mat& R21,
                                cv::Mat& t21,
-                               std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
+                               std::vector<std::pair<cv::DMatch, cv::Point3f>>& raw_init_landmarks,
                                float min_parallax,
                                int min_triangulated);
       void NormalizeKeyPoints(const std::vector<cv::KeyPoint>& kps,
@@ -129,7 +130,7 @@ namespace ak
                   const std::vector<cv::KeyPoint>& keypoints_cur,
                   const std::vector<cv::DMatch>& matched_inliers,
                   const cv::Mat& K,
-                  std::vector<std::pair<size_t, cv::Point3f>>& init_landmarks,
+                  std::vector<std::pair<cv::DMatch, cv::Point3f>>& raw_init_landmarks,
                   float th2,
                   float& parallax
                   );
@@ -143,7 +144,7 @@ namespace ak
                       cv::Mat& R2,
                       cv::Mat& t);
 
-      void InitMap();
+      bool InitMap();
       //=========== END Initialization Functions==============
 
       bool trackWithLastKeyFrame(Frame::Ptr& ptr_last_keyframe,

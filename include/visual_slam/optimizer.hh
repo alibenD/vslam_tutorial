@@ -53,6 +53,14 @@ namespace ak
                            const cv::Mat& K,
                            float& sigma2
                            );
+
+      static void localBundleAdjustment(const Frame::Ptr& ptr_local_frame,
+                                        const Map::Ptr& map,
+                                        float& sigma2,
+                                        const cv::Mat& K,
+                                        bool* ptr_stop_flag=nullptr,
+                                        const bool flag_robust = true
+                                          );
   };
 }
 #endif // __OPTIMIZER_HH__

@@ -5,7 +5,7 @@
   * @version: v0.0.1
   * @author: aliben.develop@gmail.com
   * @create_date: 2019-03-01 15:20:49
-  * @last_modified_date: 2019-04-22 18:13:47
+  * @last_modified_date: 2019-04-24 18:49:45
   * @brief: TODO
   * @details: TODO
   */
@@ -43,7 +43,6 @@ namespace ak {
   {
     ptr_orb_extractor_init_ = std::make_shared<ORBextractor>(2*NUM_FEATURES,LEVEL_SCALE_FACTOR,NUM_LEVELS,INIT_FAST,MIN_FAST);
     ptr_orb_extractor_track_ = std::make_shared<ORBextractor>(NUM_FEATURES,LEVEL_SCALE_FACTOR,NUM_LEVELS,INIT_FAST,MIN_FAST);
-
     ptr_orb_matcher_init_ = std::make_shared<ORBmatcher>(0.9, true);
     ptr_optimizer_ = std::make_shared<Optimizer>();
     ptr_map_ = std::make_shared<Map>();
@@ -52,6 +51,8 @@ namespace ak {
       0, 0, 1);
     vo_params_.vo_state_ = NO_IMAGE;
     vo_params_.init_params_.sigma_2_ = std::pow(vo_params_.init_params_.sigma_, 2);
+    Frame::K = vo_params_.K_;
+    Frame::level_scale_factor = vo_params_.orb_params_.level_scale_factor_;
   }
 
   VisualOdometry::VisualOdometry(const std::string &vocab_path)
@@ -66,8 +67,10 @@ namespace ak {
 
   int VisualOdometry::ShowMatches(const Frame::Ptr &ptr_last_frame,
                                   const Frame::Ptr &ptr_current_frame,
-                                  const std::string &window_name) {
-    if (ptr_last_frame != nullptr && ptr_current_frame != nullptr) {
+                                  const std::string &window_name)
+  {
+    if (ptr_last_frame != nullptr && ptr_current_frame != nullptr)
+    {
       cv::Mat matched_image;
       cv::drawMatches(ptr_last_frame->image_,
                       ptr_last_frame->keypoints_,
@@ -81,12 +84,14 @@ namespace ak {
     return 0;
   }
 
-  int VisualOdometry::ShowMatches(const std::string &window_name) {
+  int VisualOdometry::ShowMatches(const std::string &window_name)
+  {
     ShowMatches(this->ptr_last_keyframe_, this->ptr_current_frame_, window_name);
     return 0;
   }
 
-  int VisualOdometry::newFrame(const cv::Mat &image) {
+  int VisualOdometry::newFrame(const cv::Mat &image)
+  {
     //auto pFrame = Frame::CreateFrame(image, ptr_vocal_);
     //auto num_keypoints = pFrame->getKeyPoints().size();
     if (vo_params_.vo_state_ == NO_IMAGE)
@@ -118,7 +123,12 @@ namespace ak {
       // TODO: (aliben.develop@gmail.com)
       // Accept a frame gap from the last to init the last frame,
       // but the biggest diff id num is 2, this could be better.
-      auto pFrame = Frame::CreateFrame(image, ptr_orb_extractor_track_, ptr_vocal_);
+      auto pFrame = Frame::CreateFrame(image, ptr_orb_extractor_init_, ptr_vocal_);
+
+      pFrame->ptr_reference_frame_ = ptr_initialized_frame_;
+      this->ptr_last_frame_ = this->ptr_initialized_frame_;
+      this->ptr_current_frame_ = pFrame;
+
       auto num_keypoints = pFrame->getKeyPoints().size();
       if (num_keypoints < 100)
       {
@@ -128,8 +138,6 @@ namespace ak {
         vo_params_.vo_state_ = NO_IMAGE;
         return 0;
       }
-      //      this->ptr_last_frame_ = this->ptr_current_frame_;
-      //      this->ptr_current_frame_ = pFrame;
       auto num_matches = this->ptr_orb_matcher_init_->SearchForInitialization(ptr_initialized_frame_, pFrame, 100);
       //auto all_matches = ptr_initialized_frame_->best_matches_;
       AK_DLOG_ERROR << "Matched: " << num_matches;
@@ -137,10 +145,6 @@ namespace ak {
       // Since masOS does NOT support NSWindow start in a thread which is not the main one,
       // So the solution is that VisualOdometry run in a new thread, Pangolin and cv::imshow run in the main thread.
       */ 
-      //if(vo_params_.enable_show_ == true)
-      //{
-      //  ShowMatches(ptr_initialized_frame_, pFrame);
-      //}
       {
         std::lock_guard<std::mutex> guard(show_mutex_);
         vo_params_.enable_show_ = true;
@@ -153,15 +157,10 @@ namespace ak {
         this->ptr_current_frame_ = pFrame;
         vo_params_.vo_state_ = NO_IMAGE;
         //vo_params_.vo_state_ = NO_INITIALIZATION;
-        //return nullptr;
         return 0;
       }
       else
       {
-        AK_DLOG_ERROR << "Init";
-        exit(0);
-        this->ptr_last_frame_ = this->ptr_initialized_frame_;
-        this->ptr_current_frame_ = pFrame;
         cv::Mat R21, t21;
         auto isInit = InitializeVO(ptr_initialized_frame_,
                                    ptr_current_frame_,
@@ -171,43 +170,33 @@ namespace ak {
         {
           // If Initialization successful, then calculate the transformation
           vo_params_.vo_state_ = INITIALIZED;
-          cv::Mat transform_current_at_initialized = cv::Mat::eye(4, 4, CV_32F);
-          R21.copyTo(transform_current_at_initialized.rowRange(0, 3).colRange(0, 3));
-          t21.copyTo(transform_current_at_initialized.rowRange(0, 3).col(3));
-          auto camera_origin_at_world = -R21.inv() * t21;
+          cv::Mat T21_init = cv::Mat::eye(4, 4, CV_32F);
+          R21.copyTo(T21_init.rowRange(0, 3).colRange(0, 3));
+          t21.copyTo(T21_init.rowRange(0, 3).col(3));
+          //auto camera_origin_at_world = -R21.inv() * t21;
+
           // Set pose for current frame
-          ptr_initialized_frame_->transform_camera_at_world_ = cv::Mat::eye(4, 4, CV_32F);
-          ptr_initialized_frame_->camera_origin_at_world_ = cv::Mat::zeros(3, 1, CV_32F);
-          //ptr_initialized_frame_->translation_ = ptr_initialized_frame_->transform_camera_at_world_.rowRange(0,3).col(3);
-          //ptr_initialized_frame_->rotation_ = ptr_initialized_frame_->transform_camera_at_world_.rowRange(0,3).colRange(0,3);
-          ptr_current_frame_->transform_camera_at_world_ = transform_current_at_initialized;
-          ptr_current_frame_->camera_origin_at_world_ = camera_origin_at_world;
-          AK_DLOG_INFO << "raw_init_landmarks: " << Frame::raw_init_landmarks.size();
-
-
+          ptr_initialized_frame_->setTF(cv::Mat::eye(4, 4, CV_32F));
           ptr_current_frame_->setReferenceFrame(ptr_initialized_frame_);
-          //frames_vector_.push_back(ptr_last_frame_);
-          //frames_vector_.push_back(ptr_current_frame_);
-          //keyframes_vector_.push_back(ptr_last_frame_);
-          //keyframes_vector_.push_back(ptr_current_frame_);
-          //hash_frames_.insert(std::make_pair(ptr_initialized_frame_->getID(), ptr_initialized_frame_));
-          //hash_keyframes_.insert(std::make_pair(ptr_initialized_frame_->getID(), ptr_initialized_frame_));
-          //ptr_map_->addFrame(ptr_last_frame_);
-          //ptr_map_->addFrame(ptr_current_frame_);
+          ptr_current_frame_->setTF(T21_init);
+
+          //Update Map
           ptr_map_->addKeyFrame(ptr_initialized_frame_);
           ptr_map_->addKeyFrame(ptr_current_frame_);
 
-          AK_LOG_INFO << "Before Tcw:\n" << ptr_current_frame_->transform_camera_at_world_;
-          InitMap();
-          AK_LOG_INFO << "After Optimization Tcw:\n" << ptr_current_frame_->transform_camera_at_world_;
+          AK_DLOG_INFO << "Before Tcw:\n" << ptr_current_frame_->T21_estimated_;
+          if(InitMap() == false)
+          {
+            return 0;
+          }
+          AK_DLOG_INFO << "After Optimization Tcw:\n" << ptr_current_frame_->T21_estimated_;
 
-          //AK_DLOG_INFO << "MapPoint Size: " << landmarks_map_.size();
           AK_DLOG_INFO << "MapPoint Size: " << ptr_map_->getLandmarks().size();
           ptr_last_keyframe_ = ptr_initialized_frame_;
           ptr_current_keyframe_ = ptr_current_frame_;
-          //          ptr_last_frame_ = ptr_current_frame_;
+          ptr_last_frame_ = ptr_current_frame_;
           AK_LOG_INFO << "Initialization Done!!";
-          //exit(0);
+          exit(0);
         }
         else
         {
@@ -244,14 +233,17 @@ namespace ak {
   bool VisualOdometry::InitializeVO(const Frame::Ptr &ptr_initialized_frame,
                                     const Frame::Ptr &ptr_current_frame,
                                     cv::Mat &Rcw,
-                                    cv::Mat &tcw) {
+                                    cv::Mat &tcw)
+  {
     setRandomSeed(0);
     ransec_matched_points_set_ = std::vector<std::vector<cv::DMatch>>(vo_params_.init_params_.max_iterations_,
                                                                       std::vector<cv::DMatch>(8, cv::DMatch()));
-    for (size_t i = 0; i < vo_params_.init_params_.max_iterations_; ++i) {
+    for (size_t i = 0; i < vo_params_.init_params_.max_iterations_; ++i)
+    {
       //AK_DLOG_INFO << "Iteration: " << i;
       auto matches = ptr_initialized_frame->best_matches_;
-      for (size_t j = 0; j < 8; ++j) {
+      for (size_t j = 0; j < 8; ++j)
+      {
         auto random_index_point_pair = randomInt(0, matches.size() - 1);
         auto index_matched = matches[random_index_point_pair];
         ransec_matched_points_set_[i][j] = index_matched;
@@ -288,7 +280,8 @@ namespace ak {
     AK_DLOG_INFO << "inliers_H : " << inliers_H.size();
     AK_DLOG_INFO << "inliers_F : " << inliers_F.size();
     AK_DLOG_INFO << "ratio_homography: " << ratio_homography;
-    if (ratio_homography > 0.40) {
+    if (ratio_homography > 0.40)
+    {
       AK_DLOG_WARNING << "Reconstruct From Homography.";
       //ptr_initialized_frame_->best_matches_inliers_ = inliers_H;
       return ReconstructFromHomo(inliers_H,
@@ -299,7 +292,9 @@ namespace ak {
                                  Frame::raw_init_landmarks,
                                  1.0,
                                  50);
-    } else {
+    }
+    else
+    {
       AK_DLOG_WARNING << "Reconstruct From Fundamental.";
       //ptr_initialized_frame_->best_matches_inliers_ = inliers_F;
       return ReconstructFromFund(inliers_F,
@@ -316,7 +311,8 @@ namespace ak {
 
 
   float VisualOdometry::FindHomography(std::vector<cv::DMatch> &matched_inliers,
-                                       cv::Mat &H21) {
+                                       cv::Mat &H21)
+  {
     AK_DLOG_INFO << "Find homography...";
     std::vector<cv::KeyPoint> normalized_kps_init, normalized_kps_cur;
     cv::Mat transform_init, transform_cur;
@@ -336,8 +332,10 @@ namespace ak {
     std::vector<cv::KeyPoint> ransec_cur_keypoints(8);
     cv::Mat H21_tmp, H12_tmp;
     float current_score;
-    for (size_t iter = 0; iter < vo_params_.init_params_.max_iterations_; ++iter) {
-      for (auto n = 0; n < 8; ++n) {
+    for (size_t iter = 0; iter < vo_params_.init_params_.max_iterations_; ++iter)
+    {
+      for (auto n = 0; n < 8; ++n)
+      {
         auto queryIdx = ransec_matched_points_set_[iter][n].queryIdx;
         auto trainIdx = ransec_matched_points_set_[iter][n].trainIdx;
         ransec_init_keypoints[n] = normalized_kps_init[queryIdx];
@@ -349,7 +347,8 @@ namespace ak {
       H12_tmp = H21_tmp.inv();
       // CheckH21 - sigma = 1.0
       current_score = CheckHomography(H21_tmp, H12_tmp, matched_inliers, 1.0);
-      if (current_score > score) {
+      if (current_score > score)
+      {
         H21 = H21_tmp.clone();
         score = current_score;
       }
@@ -359,7 +358,8 @@ namespace ak {
 
 
   float VisualOdometry::FindFundamental(std::vector<cv::DMatch> &matched_inliers,
-                                        cv::Mat &F21) {
+                                        cv::Mat &F21)
+  {
     AK_DLOG_INFO << "Find fundamental ...";
     std::vector<cv::KeyPoint> normalized_kps_init, normalized_kps_cur;
     cv::Mat transform_init, transform_cur;
@@ -380,8 +380,10 @@ namespace ak {
     cv::Mat F21_tmp;
     float current_score;
     std::vector<cv::DMatch> ransec_matched_inliers;
-    for (size_t iter = 0; iter < vo_params_.init_params_.max_iterations_; ++iter) {
-      for (auto n = 0; n < 8; ++n) {
+    for (size_t iter = 0; iter < vo_params_.init_params_.max_iterations_; ++iter)
+    {
+      for (auto n = 0; n < 8; ++n)
+      {
         ransec_init_keypoints[n] = normalized_kps_init[ransec_matched_points_set_[iter][n].queryIdx];
         ransec_cur_keypoints[n] = normalized_kps_cur[ransec_matched_points_set_[iter][n].trainIdx];
       }
@@ -390,7 +392,8 @@ namespace ak {
       F21_tmp = transform_cur_transpose * F21_normalized * transform_init;
       // CheckF21 - sigma = 1.0
       current_score = CheckFundamental(F21_tmp, ransec_matched_inliers, 1.0);
-      if (current_score > score) {
+      if (current_score > score)
+      {
         F21 = F21_tmp.clone();
         score = current_score;
         matched_inliers = ransec_matched_inliers;
@@ -401,12 +404,14 @@ namespace ak {
 
   void VisualOdometry::NormalizeKeyPoints(const std::vector<cv::KeyPoint> &kps,
                                           std::vector<cv::KeyPoint> &kps_normalized,
-                                          cv::Mat &Transform) {
+                                          cv::Mat &Transform)
+  {
     float mean_x = 0.0;
     float mean_y = 0.0;
     const size_t KEYPOINT_SIZE = kps.size();
     kps_normalized.resize(KEYPOINT_SIZE);
-    for (auto &kp: kps) {
+    for (auto &kp: kps)
+    {
       mean_x += kp.pt.x;
       mean_y += kp.pt.y;
     }
@@ -415,7 +420,8 @@ namespace ak {
     float deviation_x = 0.0;
     float deviation_y = 0.0;
     size_t i = 0;
-    for (auto &kp: kps) {
+    for (auto &kp: kps)
+    {
       kps_normalized[i].pt.x = kp.pt.x - mean_x;
       kps_normalized[i].pt.y = kp.pt.y - mean_y;
       deviation_x += std::abs(kps_normalized[i].pt.x);
@@ -426,7 +432,8 @@ namespace ak {
     deviation_y /= KEYPOINT_SIZE;
     auto deviation_x_inv = 1.0 / deviation_x;
     auto deviation_y_inv = 1.0 / deviation_y;
-    for (auto &kp_normal: kps_normalized) {
+    for (auto &kp_normal: kps_normalized)
+    {
       kp_normal.pt.x *= deviation_x_inv;
       kp_normal.pt.y *= deviation_y_inv;
     }
@@ -438,10 +445,12 @@ namespace ak {
   }
 
   cv::Mat VisualOdometry::ComputeH21(const std::vector<cv::KeyPoint> &keypoints_init,
-                                     const std::vector<cv::KeyPoint> &keypoints_cur) {
+                                     const std::vector<cv::KeyPoint> &keypoints_cur)
+  {
     const int N = keypoints_init.size();
     cv::Mat A(2 * N, 9, CV_32F);
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < N; i++)
+    {
       const float u1 = keypoints_init[i].pt.x;
       const float v1 = keypoints_init[i].pt.y;
       const float u2 = keypoints_cur[i].pt.x;
@@ -472,7 +481,8 @@ namespace ak {
   }
 
   cv::Mat VisualOdometry::ComputeF21(const std::vector<cv::KeyPoint> &keypoints_init,
-                                     const std::vector<cv::KeyPoint> &keypoints_cur) {
+                                     const std::vector<cv::KeyPoint> &keypoints_cur)
+  {
     const int N = keypoints_init.size();
     cv::Mat A(N, 9, CV_32F);
 
@@ -505,7 +515,8 @@ namespace ak {
   float VisualOdometry::CheckHomography(const cv::Mat &H21,
                                         const cv::Mat &H12,
                                         std::vector<cv::DMatch> &matched_inliers,
-                                        float sigma) {
+                                        float sigma)
+  {
     matched_inliers.clear();
     const size_t N = ptr_initialized_frame_->best_matches_.size();
 
@@ -532,7 +543,8 @@ namespace ak {
     float score = 0;
     const float th = 5.991;
     const float inv_sigma_square = 1.0 / (sigma * sigma);
-    for (size_t i = 0; i < N; ++i) {
+    for (size_t i = 0; i < N; ++i)
+    {
       bool isInliers = true;
       auto index_kp_init = ptr_initialized_frame_->best_matches_[i].queryIdx;
       auto index_kp_cur = ptr_initialized_frame_->best_matches_[i].trainIdx;
@@ -549,9 +561,12 @@ namespace ak {
       const float squareDist1 = (u1 - u2in1) * (u1 - u2in1) + (v1 - v2in1) * (v1 - v2in1);
       const float chiSquare1 = squareDist1 * inv_sigma_square;
 
-      if (chiSquare1 > th) {
+      if (chiSquare1 > th)
+      {
         isInliers = false;
-      } else {
+      }
+      else
+      {
         score += th - chiSquare1;
       }
 
@@ -564,13 +579,17 @@ namespace ak {
       const float squareDist2 = (u2 - u1in2) * (u2 - u1in2) + (v2 - v1in2) * (v2 - v1in2);
       const float chiSquare2 = squareDist2 * inv_sigma_square;
 
-      if (chiSquare2 > th) {
+      if (chiSquare2 > th)
+      {
         isInliers = false;
-      } else {
+      }
+      else
+      {
         score += th - chiSquare2;
       }
 
-      if (isInliers) {
+      if (isInliers)
+      {
         //AK_DLOG_ERROR << "One inliers captured.";
         matched_inliers.push_back(ptr_initialized_frame_->best_matches_[i]);
       }
@@ -581,7 +600,8 @@ namespace ak {
 
   float VisualOdometry::CheckFundamental(const cv::Mat &F21,
                                          std::vector<cv::DMatch> &matched_inliers,
-                                         float sigma) {
+                                         float sigma)
+  {
     matched_inliers.clear();
     const int N = ptr_initialized_frame_->best_matches_.size();
     const float f11 = F21.at<float>(0, 0);
@@ -600,7 +620,8 @@ namespace ak {
 
     const float invSigmaSquare = 1.0 / (sigma * sigma);
 
-    for (int i = 0; i < N; i++) {
+    for (int i = 0; i < N; i++)
+    {
       bool isInliers = true;
 
       auto index_kp_init = ptr_initialized_frame_->best_matches_[i].queryIdx;
@@ -624,9 +645,12 @@ namespace ak {
       const float squareDist1 = num2 * num2 / (a2 * a2 + b2 * b2);
       const float chiSquare1 = squareDist1 * invSigmaSquare;
 
-      if (chiSquare1 > th) {
+      if (chiSquare1 > th)
+      {
         isInliers = false;
-      } else {
+      }
+      else
+      {
         score += thScore - chiSquare1;
       }
 
@@ -640,13 +664,17 @@ namespace ak {
       const float squareDist2 = num1 * num1 / (a1 * a1 + b1 * b1);
       const float chiSquare2 = squareDist2 * invSigmaSquare;
 
-      if (chiSquare2 > th) {
+      if (chiSquare2 > th)
+      {
         isInliers = false;
-      } else {
+      }
+      else
+      {
         score += thScore - chiSquare2;
       }
 
-      if (isInliers) {
+      if (isInliers)
+      {
         //AK_DLOG_ERROR << "One inliers captured.";
         matched_inliers.push_back(ptr_initialized_frame_->best_matches_[i]);
         //AK_DLOG_WARNING << matched_inliers.size();
@@ -661,9 +689,10 @@ namespace ak {
                                            cv::Mat &K,
                                            cv::Mat &R21,
                                            cv::Mat &t21,
-                                           std::vector<std::pair<size_t, cv::Point3f>> &raw_init_landmarks,
+                                           std::vector<std::pair<cv::DMatch, cv::Point3f>> &raw_init_landmarks,
                                            float min_parallax,
-                                           int min_triangulated) {
+                                           int min_triangulated)
+  {
     //AK_DLOG_WARNING << "Reconstructing Homography";
     cv::Mat K_inv = K.inv();
     cv::Mat A = K_inv * H21 * K;
@@ -678,7 +707,8 @@ namespace ak {
     float d2 = w.at<float>(1);
     float d3 = w.at<float>(2);
 
-    if (d1 / d2 < 1.00001 || d2 / d3 < 1.00001) {
+    if (d1 / d2 < 1.00001 || d2 / d3 < 1.00001)
+    {
       return false;
     }
 
@@ -698,7 +728,8 @@ namespace ak {
     float ctheta = (d2 * d2 + d1 * d3) / ((d1 + d3) * d2);
     float stheta[] = {aux_stheta, -aux_stheta, -aux_stheta, aux_stheta};
 
-    for (int i = 0; i < 4; i++) {
+    for (int i = 0; i < 4; i++)
+    {
       cv::Mat Rp = cv::Mat::eye(3, 3, CV_32F);
       Rp.at<float>(0, 0) = ctheta;
       Rp.at<float>(0, 2) = -stheta[i];
@@ -770,14 +801,15 @@ namespace ak {
     int bestSolutionIdx = -1;
     float bestParallax = -1;
 
-    std::vector<std::pair<size_t, cv::Point3f>> bestP3D;
+    std::vector<std::pair<cv::DMatch, cv::Point3f>> bestP3D;
     //    std::vector<std::pair<size_t, cv::Point3f>> bestTriangulated;
 
     // Instead of applying the visibility constraints proposed in the Faugeras' paper (which could fail for points seen with low parallax)
     // We reconstruct all hypotheses and check in terms of triangulated points and parallax
-    for (size_t i = 0; i < 8; i++) {
+    for (size_t i = 0; i < 8; i++)
+    {
       float parallaxi{0.0};
-      std::vector<std::pair<size_t, cv::Point3f>> vP3Di;
+      std::vector<std::pair<cv::DMatch, cv::Point3f>> vP3Di;
       int nGood = CheckRT(vector_R[i],
                           vector_t[i],
                           ptr_initialized_frame_->getKeyPoints(),
@@ -788,13 +820,16 @@ namespace ak {
                           4.0 * vo_params_.init_params_.sigma_2_,
                           parallaxi);
 
-      if (nGood > bestGood) {
+      if (nGood > bestGood)
+      {
         secondBestGood = bestGood;
         bestGood = nGood;
         bestSolutionIdx = i;
         bestParallax = parallaxi;
         bestP3D = vP3Di;
-      } else if (nGood > secondBestGood) {
+      }
+      else if (nGood > secondBestGood)
+      {
         secondBestGood = nGood;
       }
     }
@@ -803,7 +838,8 @@ namespace ak {
     ptr_last_frame_->best_matches_inliers_ = matched_inliers;
 
     if (secondBestGood < 0.75 * bestGood && bestParallax >= min_parallax && bestGood > min_triangulated &&
-        bestGood > 0.9 * N) {
+        bestGood > 0.9 * N)
+    {
       vector_R[bestSolutionIdx].copyTo(R21);
       vector_t[bestSolutionIdx].copyTo(t21);
       raw_init_landmarks = bestP3D;
@@ -817,9 +853,10 @@ namespace ak {
                                            cv::Mat &K,
                                            cv::Mat &R21,
                                            cv::Mat &t21,
-                                           std::vector<std::pair<size_t, cv::Point3f>> &raw_init_landmarks,
+                                           std::vector<std::pair<cv::DMatch, cv::Point3f>> &raw_init_landmarks,
                                            float min_parallax,
-                                           int min_triangulated) {
+                                           int min_triangulated)
+  {
     //AK_DLOG_WARNING << "Reconstructing Fundamental";
     // Compute Essential Matrix from Fundamental Matrix
     cv::Mat E21 = K.t() * F21 * K;
@@ -832,7 +869,7 @@ namespace ak {
 
     // Reconstruct with the 4 hyphoteses and check
     //    std::vector<std::pair<size_t, cv::Point3f>> bestP3D;
-    std::vector<std::pair<size_t, cv::Point3f>> vP3D1, vP3D2, vP3D3, vP3D4;
+    std::vector<std::pair<cv::DMatch, cv::Point3f>> vP3D1, vP3D2, vP3D3, vP3D4;
     //    std::vector<std::pair<size_t, cv::Point3f>> bestTriangulated1,bestTriangulated2,bestTriangulated3, bestTriangulated4;
     float parallax1, parallax2, parallax3, parallax4;
     int nGood1 = CheckRT(R1,
@@ -892,14 +929,17 @@ namespace ak {
       nsimilar++;
 
     // If there is not a clear winner or not enough triangulated points reject initialization
-    if (maxGood < nMinGood || nsimilar > 1) {
+    if (maxGood < nMinGood || nsimilar > 1)
+    {
       AK_DLOG_ERROR << "Triangulated is too less.";
       return false;
     }
 
     // If best reconstruction has enough parallax initialize
-    if (maxGood == nGood1) {
-      if (parallax1 > min_parallax) {
+    if (maxGood == nGood1)
+    {
+      if (parallax1 > min_parallax)
+      {
         raw_init_landmarks = vP3D1;
         //        raw_init_landmarks = bestTriangulated1;
         //vbTriangulated = vbTriangulated1;
@@ -907,8 +947,11 @@ namespace ak {
         t1.copyTo(t21);
         return true;
       }
-    } else if (maxGood == nGood2) {
-      if (parallax2 > min_parallax) {
+    }
+    else if (maxGood == nGood2)
+    {
+      if (parallax2 > min_parallax)
+      {
         raw_init_landmarks = vP3D2;
         //vbTriangulated = vbTriangulated2;
         //        raw_init_landmarks = bestTriangulated2;
@@ -916,8 +959,11 @@ namespace ak {
         t1.copyTo(t21);
         return true;
       }
-    } else if (maxGood == nGood3) {
-      if (parallax3 > min_parallax) {
+    }
+    else if (maxGood == nGood3)
+    {
+      if (parallax3 > min_parallax)
+      {
         raw_init_landmarks = vP3D3;
         //vbTriangulated = vbTriangulated3;
         //        raw_init_landmarks = bestTriangulated3;
@@ -925,8 +971,11 @@ namespace ak {
         t2.copyTo(t21);
         return true;
       }
-    } else if (maxGood == nGood4) {
-      if (parallax4 > min_parallax) {
+    }
+    else if (maxGood == nGood4)
+    {
+      if (parallax4 > min_parallax)
+      {
         raw_init_landmarks = vP3D4;
         //vbTriangulated = vbTriangulated4;
         //        raw_init_landmarks = bestTriangulated4;
@@ -938,17 +987,17 @@ namespace ak {
     return false;
   }
 
-
   int VisualOdometry::CheckRT(const cv::Mat &R,
                               const cv::Mat &t,
                               const std::vector<cv::KeyPoint> &keypoints_last,
                               const std::vector<cv::KeyPoint> &keypoints_cur,
                               const std::vector<cv::DMatch> &matched_inliers,
                               const cv::Mat &K,
-                              std::vector<std::pair<size_t, cv::Point3f>> &raw_init_landmarks,
+                              std::vector<std::pair<cv::DMatch, cv::Point3f>> &raw_init_landmarks,
                               float th2,
                               float &parallax
-  ) {
+  )
+  {
     // Calibration parameters
     const float fx = K.at<float>(0, 0);
     const float fy = K.at<float>(1, 1);
@@ -979,7 +1028,8 @@ namespace ak {
     std::vector<std::pair<size_t, cv::Point3f>> triangulated_matches;
 
     size_t match_size = matched_inliers.size();
-    for (size_t i = 0; i < match_size; ++i) {
+    for (size_t i = 0; i < match_size; ++i)
+    {
       //if(!vbMatchesInliers[i])
       //    continue;
 
@@ -1039,7 +1089,8 @@ namespace ak {
       //vP3D[vMatches12[i].first] = cv::Point3f(p3dC1.at<float>(0),p3dC1.at<float>(1),p3dC1.at<float>(2));
       auto landmark = cv::Point3f(p3dC1.at<float>(0), p3dC1.at<float>(1), p3dC1.at<float>(2));
       //raw_init_landmarks.push_back(std::make_pair(matched_inliers[i].queryIdx, landmark));
-      raw_init_landmarks.push_back(std::make_pair(i, landmark));
+      //raw_init_landmarks.push_back(std::make_pair(i, landmark));
+      raw_init_landmarks.push_back(std::make_pair(matched_inliers[i], landmark));
 
       nGood++;
 
@@ -1050,11 +1101,14 @@ namespace ak {
     }
 
 
-    if (nGood > 0) {
+    if (nGood > 0)
+    {
       sort(vCosParallax.begin(), vCosParallax.end());
       size_t idx = std::min(50, int(vCosParallax.size() - 1));
       parallax = acos(vCosParallax[idx]) * 180 / CV_PI;
-    } else {
+    }
+    else
+    {
       parallax = 0;
     }
     return nGood;
@@ -1065,7 +1119,8 @@ namespace ak {
                                    const cv::KeyPoint &kp_cur,
                                    const cv::Mat &pose_init,
                                    const cv::Mat &pose_cur,
-                                   cv::Mat &x3D) {
+                                   cv::Mat &x3D)
+  {
     cv::Mat A(4, 4, CV_32F);
 
     A.row(0) = kp_init.pt.x * pose_init.row(2) - pose_init.row(0);
@@ -1082,7 +1137,8 @@ namespace ak {
   void VisualOdometry::DecomposeE(const cv::Mat &E,
                                   cv::Mat &R1,
                                   cv::Mat &R2,
-                                  cv::Mat &t) {
+                                  cv::Mat &t)
+  {
     cv::Mat u, w, vt;
     cv::SVD::compute(E, w, u, vt);
 
@@ -1103,27 +1159,30 @@ namespace ak {
       R2 = -R2;
   }
 
-  void VisualOdometry::InitMap() {
+  bool VisualOdometry::InitMap()
+  {
     auto raw_init_landmarks_size = Frame::raw_init_landmarks.size();
     AK_DLOG_WARNING << "Init landmark: " << raw_init_landmarks_size;
-    for (size_t i = 0; i < raw_init_landmarks_size; ++i) {
+    for (size_t i = 0; i < raw_init_landmarks_size; ++i)
+    {
       //cv::Mat position_at_world(Frame::raw_init_landmarks[i].second);
       auto position_at_world = Frame::raw_init_landmarks[i].second;
-      auto idx_matched = Frame::raw_init_landmarks[i].first;
       auto ptr_landmark = Landmark::CreateLandmark(ptr_initialized_frame_, ptr_current_frame_, position_at_world);
-      //      AK_DLOG_ERROR << "Num: " << ptr_initialized_frame_->best_matches_inliers_[idx_matched].queryIdx;
-      //AK_DLOG_INFO << "Init Frame:";
-      auto queryIdx = ptr_initialized_frame_->best_matches_inliers_[idx_matched].queryIdx;
-      auto trainIdx = ptr_initialized_frame_->best_matches_inliers_[idx_matched].trainIdx;
+
+      //auto idx_matched = Frame::raw_init_landmarks[i].first.queryIdx;
+      //auto queryIdx = ptr_initialized_frame_->best_matches_inliers_[idx_matched].queryIdx;
+      //auto trainIdx = ptr_initialized_frame_->best_matches_inliers_[idx_matched].trainIdx;
+      auto queryIdx = Frame::raw_init_landmarks[i].first.queryIdx;
+      auto trainIdx = Frame::raw_init_landmarks[i].first.trainIdx;
+
       ptr_initialized_frame_->insertLandmark(ptr_landmark, queryIdx);
-      //AK_DLOG_INFO << "Current Frame:";
       ptr_current_frame_->insertLandmark(ptr_landmark, trainIdx);
 
       // Add Observation
       ptr_landmark->addObserver(ptr_initialized_frame_, queryIdx);
       ptr_landmark->addObserver(ptr_current_frame_, trainIdx);
-
       ptr_landmark->updateLandmark();
+      ptr_landmark->fuse_for_id_ = ptr_current_frame_->getID();
       ptr_map_->addLandmark(ptr_landmark);
     }
 
@@ -1134,17 +1193,28 @@ namespace ak {
     // Optimizer setup
     AK_DLOG_INFO << "Optimization by reprojection error.";
     // Initial a scale for slam, !!! Attension, it is not real distance in the world, they differ with a scale factor, so if we need a real distance for map, there must have another source to confirm the scale factor
-    //ptr_optimizer_->bundleAdjustment(keyframes_vector_, landmarks_, vo_params_.K_, vo_params_.init_params_.sigma_, 20);
     ptr_optimizer_->globalBundleAdjustment(ptr_map_, vo_params_.K_, vo_params_.init_params_.sigma_, 20);
     AK_DLOG_INFO << "Global optimizating Done!";
     auto median_depth = ptr_initialized_frame_->computeMedianDepth(2);
     auto inv_median_depth = 1.0f / median_depth;
 
-    //    if(median_depth < 0 || )
-    cv::Mat transform = ptr_current_frame_->getPose();
+    if(median_depth < 0.)
+    {
+      AK_LOG_WARNING << "Init failed. Depth recovered is a negative num.";
+      resetVO();
+      return false;
+    }
+    if(ptr_current_frame_->getNumTrackedLandmarksWithObservationTimes(1)<100)
+    {
+      AK_LOG_WARNING << "Init failed. No landmark in the frame " << ptr_current_frame_->getID();
+      resetVO();
+      return false;
+    }
+
+    cv::Mat transform = ptr_current_frame_->getTF();
     transform.col(3).rowRange(0, 3) = transform.col(3).rowRange(0, 3) * inv_median_depth;
-    //    ptr_current_frame->setPose()
-    ptr_current_frame_->transform_camera_at_world_ = transform;
+    // Set scale for frame's pose
+    ptr_current_frame_->setTF(transform);
 
     // Scale All point
     auto landmarks = ptr_initialized_frame_->getLandmarks();
@@ -1156,17 +1226,32 @@ namespace ak {
         ptr_landmark->setPosition(ptr_landmark->getPosition() * inv_median_depth);
       }
     }
+
+    // TODO: (aliben.develop@gmail.com)
+    // Init local map
+    return true;
   }
 
-  bool VisualOdometry::trackWithLastKeyFrame(Frame::Ptr &ptr_last_keyframe, Frame::Ptr &ptr_new_frame) {
+  void VisualOdometry::resetVO()
+  {
+    vo_params_.vo_state_ = NO_IMAGE;
+    ptr_initialized_frame_ = nullptr;
+    ptr_last_frame_ = nullptr;
+    ptr_last_keyframe_ = nullptr;
+    ptr_current_keyframe_ = nullptr;
+    ptr_map_->resetMap();
+  }
+
+  bool VisualOdometry::trackWithLastKeyFrame(Frame::Ptr &ptr_last_keyframe, Frame::Ptr &ptr_new_frame)
+  {
     ORBmatcher matcher(0.7, true);
     //    std::vector<Landmark::Ptr> landmarks_matched;
     std::unordered_map<size_t, Landmark::Ptr> landmarks_matched;
     int num_matches = matcher.SearchByBoW(ptr_last_keyframe, ptr_new_frame, landmarks_matched);
 
     AK_DLOG_INFO << "Origin: " << landmarks_matched.size();
-    auto pose = ptr_last_keyframe->getPose();
-    ptr_new_frame->setTF(pose);
+    auto transform = ptr_last_keyframe->getTF();
+    ptr_new_frame->setTF(transform);
 
     ptr_optimizer_->PoseOptimization(ptr_new_frame,
                                      vo_params_.K_,
@@ -1185,9 +1270,10 @@ namespace ak {
     // MARK: (aliben.develop@gmail.com)
     // landmark should be observe at least one frame,
     // which means that there must have a frame recovery the landmark
-    for (const auto &landmark_pair:ptr_new_frame->getLandmarks()) {
+    for (const auto &landmark_pair:ptr_new_frame->getLandmarks())
+    {
       const auto &ptr_landmark = landmark_pair.second;
-      if (ptr_landmark != nullptr && ptr_landmark->isGood() == true) {
+      if (ptr_landmark != nullptr && ptr_landmark->isAvailable() == true) {
         if (ptr_landmark->getObservationTimes() > 0) {
           ++num_good_mappoint;
         }
@@ -1198,7 +1284,7 @@ namespace ak {
 
   bool trackLocalMap()
   {
-    //updateLocalMap()
+    //newTriangLandmark()
     //SearchLocalPoint()
     return false;
   }
