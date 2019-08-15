@@ -4,7 +4,7 @@
 # @filename: visual_slam_tutorial
 # @author: aliben.develop@gmail.com
 # @create_date: 2018-11-20 10:31:08
-# @last_modified_date: 2019-01-14 11:32:40
+# @last_modified_date: 2019-05-20 10:05:08
 # @description: TODO
 #---****************************************************************---
 
@@ -18,18 +18,21 @@ project(visual_slam)
   MESSAGE( STATUS "Project:  visual_slam_tutorial" )
   # Build type default
   IF(NOT CMAKE_BUILD_TYPE)
-    SET(CMAKE_BUILD_TYPE RELEASE)
+    SET(CMAKE_BUILD_TYPE DEBUG)
   ENDIF()
   IF(CMAKE_BUILD_TYPE STREQUAL "RELEASE")
     ADD_DEFINITIONS(-DNDEBUG)
+  ELSEIF(CMAKE_BUILD_TYPE STREQUAL "DEBUG")
+    SET(CMAKE_DEBUG_POSTFIX _debug)
   ENDIF()
   MESSAGE( STATUS "Build Type: " ${CMAKE_BUILD_TYPE})
+  MESSAGE( STATUS "DEBUG POSTFIX: " ${CMAKE_DEBUG_POSTFIX})
   OPTION(BUILD_GTESTS "Build test example cases with google test" ON)
   OPTION(WITH_GLOG "Enable google log in this case" ON)
 
   SET(CMAKE_VERBOSE_MAKEFILE OFF)
   SET(CMAKE_CXX_STANDARD 11)
-  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -std=c++14 -Wextra -Wno-deprecated-register -Wno-deprecated-declarations -Wno-unused-private-field -Wno-unused-parameter -Wno-unused-variable -Qunused-arguments -fcolor-diagnostics -ftemplate-backtrace-limit=0")
+  SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -std=c++14 -fpic -Wextra -Wno-deprecated-register -Wno-deprecated-declarations -Wno-unused-private-field -Wno-unused-parameter -Wno-unused-variable -Qunused-arguments -fcolor-diagnostics -ftemplate-backtrace-limit=0")
   #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Werror -std=c++14 -Wextra -Wno-deprecated-register -Wno-deprecated-declarations -Qunused-arguments -fcolor-diagnostics -ftemplate-backtrace-limit=0")
   # Cross-platform check
   IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
@@ -58,6 +61,7 @@ project(visual_slam)
   IF(BUILD_SHARED_LIBS)
     SET(BUILD_SHARED_LIBS SHARED)
   ENDIF()
+  set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Add extra Find module
   LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
@@ -71,7 +75,6 @@ project(visual_slam)
     SET( TEST_LIBS
     ${GTEST_BOTH_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT})
-    ADD_SUBDIRECTORY(test)
   ENDIF()
   IF(WITH_GLOG)
     ADD_DEFINITIONS(-DENABLE_GLOG)
@@ -83,7 +86,8 @@ project(visual_slam)
   find_package(GLM REQUIRED)
   find_package(GLFW3 REQUIRED)
   find_package(ASSIMP REQUIRED)
-  find_package(QT5 REQUIRED)
+  find_package( DBoW3 REQUIRED )
+  #find_package(QT5 REQUIRED)
   find_package(G2O REQUIRED)
   find_package(Glog REQUIRED)
   message(STATUS "GLM included at ${GLM_INCLUDE_DIR}")
@@ -94,14 +98,18 @@ project(visual_slam)
   # Example: SET ( VPATH_NAME PATH )
   #          INCLUDE_DIRECTORIES(${VPATH_NAME})
   INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/include)
+  INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/ThirdParty/include)
   INCLUDE_DIRECTORIES(${PROJECT_SOURCE_DIR}/build/include)
   INCLUDE_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/include)
   INCLUDE_DIRECTORIES(${EIGEN3_INCLUDE_DIR})
   INCLUDE_DIRECTORIES(${Sophus_INCLUDE_DIRS})
   INCLUDE_DIRECTORIES(${Pangolin_INCLUDE_DIRS})
   INCLUDE_DIRECTORIES(${OpenCV_INCLUDE_DIRS})
+  #INCLUDE_DIRECTORIES(${G2O_INCLUDE_DIR})
   INCLUDE_DIRECTORIES(${GLOG_INCLUDE_DIRS})
   INCLUDE_DIRECTORIES(/System/Library/Frameworks)
+  include_directories( ${DBoW3_INCLUDE_DIRS} )
+
 
 # Set&Add LIB PATH/LINKING_DIRECTORIES
   # Example: LINK_DIRECTORIES(${CMAKE_INSTALL_PREFIX}/lib)
@@ -120,18 +128,24 @@ project(visual_slam)
     ${Sophus_LIBRARIES}
     ${OpenCV_LIBS}
     ${LIBS}
+    ${G2O_TYPES_SBA}
     ${G2O_STUFF_LIBRARY}
     ${G2O_CORE_LIBRARY}
     ${G2O_CLI_LIBRARY}
     ${GLOG_LIBRARIES}
+    ${DBoW3_LIBS}
   )
 
 #MESSAGE("*****" ${Pangolin_LIBS})
 #MESSAGE("#####" ${Pangolin_LIBRARIES})
 
 # Set Subdir(src)
+#ADD_SUBDIRECTORY(ThirdParty/src)
   ADD_SUBDIRECTORY(src)
   ADD_SUBDIRECTORY(examples)
+  IF(BUILD_GTESTS)
+    ADD_SUBDIRECTORY(test)
+  ENDIF()
 
 # EXECUTABLE
   # Example: ADD_EXECUTABLE( EXEC_NAME SRC_FILE_NAME_LIST )

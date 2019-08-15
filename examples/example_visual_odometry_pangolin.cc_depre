@@ -1,0 +1,145 @@
+/**
+  * @Copyright (C) 2019 All rights reserved.
+  * @date: 2019
+  * @file: example_visual_odometry.cc
+  * @version: v0.0.1
+  * @author: aliben.develop@gmail.com
+  * @create_date: 2019-03-02 13:14:15
+  * @last_modified_date: 2019-04-07 22:34:28
+  * @brief: TODO
+  * @details: TODO
+  */
+
+//INCLUDE
+#include <visual_slam/visual_odometry.hh>
+#include <visual_slam/logger_advanced.hh>
+#include <visual_slam/utils/io.hh>
+#include <opencv2/opencv.hpp>
+#include <pangolin/pangolin.h>
+#include <thread>
+#include <mutex>
+
+//CODE
+void view(const ak::VisualOdometry::Ptr& ptr_vo)
+{
+  AK_LOG_ERROR << "In View";
+  pangolin::CreateWindowAndBind("VisualOdometry Viewer", 1024, 768);
+  // 3D Mouse
+  glEnable(GL_DEPTH_TEST);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  // Create Panel
+  pangolin::CreatePanel("Menu").SetBounds(0., 1., 0., pangolin::Attach::Pix(175));
+  pangolin::Var<bool> menuItemShowKeyFrames("Menu.Show KeyFrames", true, true);
+  pangolin::Var<bool> menuItemShowLandmarks("Menu.Show Landmarks", true, true);
+
+  // Define View
+  float viewpoint_to_x = 0;
+  float viewpoint_to_y = 0;
+  float viewpoint_to_z = 0.;
+  float viewpoint_from_x = 0;
+  float viewpoint_from_y= -10;
+  float viewpoint_from_z = -0.1;
+  float viewpoint_from_alpha = 0.;
+  float viewpoint_from_beta= -1.;
+  float viewpoint_from_gamma= 0.;
+  float viewpoint_focal = 2000;
+  float c_heigh = 1024;
+  float c_width = 768;
+  float cx = 512;
+  float cy= 389;
+  float min_z = 0.1;
+  float max_z = 1000;
+  pangolin::OpenGlRenderState state_camera(
+        pangolin::ProjectionMatrix(c_heigh,
+                                   c_width,
+                                   viewpoint_focal,
+                                   viewpoint_focal,
+                                   cx,
+                                   cy,
+                                   min_z,
+                                   max_z),
+        pangolin::ModelViewLookAt(viewpoint_from_x,
+                                  viewpoint_from_y,
+                                  viewpoint_from_z,
+                                  viewpoint_to_x,
+                                  viewpoint_to_y,
+                                  viewpoint_to_z,
+                                  viewpoint_from_alpha,
+                                  viewpoint_from_beta,
+                                  viewpoint_from_gamma));
+
+  auto ptr_handler = new pangolin::Handler3D(state_camera);
+  pangolin::View& panel_display = pangolin::CreateDisplay().SetBounds(0., 1., pangolin::Attach::Pix(175), 1., -1024.0f/768.0f).SetHandler(ptr_handler);
+
+  cv::Mat rgb = cv::imread("/Users/aliben/project/data/cv_img/result copy.png");
+  pangolin::View& rgb_image = pangolin::Display("rgb").SetBounds(0,0.2,0.2,0.4,1024.0f/768.0f).SetLock(pangolin::LockLeft, pangolin::LockBottom);
+  pangolin::GlTexture imageTexture(rgb.cols,rgb.rows,GL_RGB,false,0,GL_BGR,GL_UNSIGNED_BYTE);
+  pangolin::OpenGlMatrix Twc;
+  Twc.SetIdentity();
+
+  while(true)
+  {
+    //AK_LOG_ERROR << "HERE";
+    {
+      std::lock_guard<std::mutex> guard(ptr_vo->show_mutex_);
+      if(ptr_vo->getVOParams().enable_show_ == true)
+      {
+        ptr_vo->ShowMatches();
+        ptr_vo->getVOParams().enable_show_ = false;
+      }
+    }
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
+    panel_display.Activate(state_camera);
+
+    //cv::imshow("D", rgb);
+    //cv::waitKey(10);
+    imageTexture.Upload(rgb.data,GL_RGB,GL_UNSIGNED_BYTE);
+    //imageTexture.RenderToViewportFlipY();
+    rgb_image.Activate();
+    glColor3f(1.0,1.0,1.0);
+    imageTexture.RenderToViewport();
+    pangolin::FinishFrame();
+  }
+  delete ptr_handler;
+};
+
+void run_slam(const std::string& fold_path,
+              const std::vector<std::string>& img_lists,
+              const ak::VisualOdometry::Ptr& ptr_vo)
+{
+  for(auto img_name : img_lists)
+  {
+    auto img_path = fold_path + "image_0/" + img_name;
+    //AK_LOG(WARNING) << "img_path: " << img_path;
+    //auto img = cv::imread(img_path);
+    cv::Mat img_current = cv::imread(img_path, cv::IMREAD_GRAYSCALE);
+    ptr_vo->newFrame(img_current);
+  }
+};
+
+using namespace ak;
+int main(int argc, char** argv)
+{
+  LOG_INIT_DEFAULT;
+  std::string fold_path("/Users/aliben/project/data/slam_data/dataset/sequences/00/");
+  std::string vocab("../data/ORBvoc.txt");
+  std::vector<std::string> img_lists;
+  auto num_img = ReadFileList(fold_path+"img_list.txt", img_lists);
+  AK_LOG(INFO) << "Count: " << num_img << "\tFrom: " << fold_path << std::endl;
+  std::string name_window = "Image";
+  cv::namedWindow(name_window, cv::WINDOW_NORMAL);
+  //==============
+  VisualOdometry::Ptr ptr_vo = std::make_shared<VisualOdometry>(vocab);
+  AK_LOG_ERROR << "Before thread";
+  auto thread_handler = std::thread(&run_slam,
+                                    std::ref(fold_path),
+                                    std::ref(img_lists),
+                                    std::ref(ptr_vo));
+  AK_LOG_ERROR << "Thread of run_slam join";
+  view(ptr_vo);
+  thread_handler.join();
+  return 0;
+}

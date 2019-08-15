@@ -17,9 +17,15 @@ doc
 log
 *.swo
 *.swp
+*.swn
 *.o
 *.a
 .idea
+cmake-build-debug
+cmake-build-release
+cmake-build-minsizerel
+cmake-build-relwithdebinfo
+
 
 
 #DON NOT IGNORE LIST
